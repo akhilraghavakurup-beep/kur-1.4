@@ -61,8 +61,7 @@ interface CachedHomeFeedEntry {
 
 const PLAYLIST_FETCH_LIMIT = 200;
 const HOME_FEED_CACHE_TTL_MS = 10 * 60 * 1000;
-const HOME_FEED_CACHE_VERSION = 'v3';
-const TRENDING_ITEMS_LIMIT = 12;
+const HOME_FEED_CACHE_VERSION = 'v2';
 
 const PREFERRED_SECTIONS: PreferredSectionDefinition[] = [
 	{
@@ -320,21 +319,6 @@ function sortItemsForPreferences(items: unknown[]): unknown[] {
 		}
 		return 0;
 	});
-}
-
-function getLocalizedTrendingLanguages(): string[] {
-	const preferences = useSettingsStore.getState().homeContentPreferences;
-	if (preferences.includes('All languages')) {
-		return [];
-	}
-
-	return Array.from(
-		new Set(
-			preferences
-				.map(mapPreferenceToApiLanguage)
-				.filter((language): language is string => !!language)
-		)
-	);
 }
 
 function interleaveBuckets<T>(buckets: T[][], limit: number): T[] {
@@ -724,74 +708,6 @@ function dedupeSections(sections: FeedSection[]): FeedSection[] {
 	return deduped;
 }
 
-function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
-	const seen = new Set<string>();
-
-	return items.filter((item) => {
-		const key = itemDedupKey(item);
-		if (seen.has(key)) {
-			return false;
-		}
-
-		seen.add(key);
-		return true;
-	});
-}
-
-async function getTrendingBucketsByLanguage(
-	client: JioSaavnClient,
-	languages: string[]
-): Promise<unknown[][]> {
-	const buckets = await Promise.all(
-		languages.map(async (language) => {
-			try {
-				const localizedLaunchData = await client.getLaunchData(language);
-				const items = localizedLaunchData.new_trending;
-				if (!Array.isArray(items) || items.length === 0) {
-					return [];
-				}
-
-				return sortItemsForPreferences(items);
-			} catch {
-				return [];
-			}
-		})
-	);
-
-	return buckets.filter((bucket) => bucket.length > 0);
-}
-
-function mapTrendingSectionItems(
-	buckets: unknown[][],
-	fallbackItems: unknown[] | undefined
-): FeedItem[] {
-	const interleaved = interleaveBuckets(buckets, TRENDING_ITEMS_LIMIT);
-	const localizedItems = mapMixedFeedItems(interleaved);
-
-	if (localizedItems.length >= TRENDING_ITEMS_LIMIT) {
-		return dedupeFeedItems(localizedItems).slice(0, TRENDING_ITEMS_LIMIT);
-	}
-
-	const fallbackMapped = mapMixedFeedItems(sortItemsForPreferences(fallbackItems ?? []));
-	return dedupeFeedItems([...localizedItems, ...fallbackMapped]).slice(0, TRENDING_ITEMS_LIMIT);
-}
-
-async function buildTrendingSection(
-	client: JioSaavnClient,
-	fallbackItems: unknown[] | undefined,
-	fallbackSubtitle?: string
-): Promise<FeedSection | null> {
-	const buckets = await getTrendingBucketsByLanguage(client, getLocalizedTrendingLanguages());
-	const items = mapTrendingSectionItems(buckets, fallbackItems);
-
-	return createSection(
-		'new-trending',
-		'Trending Now',
-		items,
-		fallbackSubtitle ?? 'What is moving fastest right now'
-	);
-}
-
 function prioritizeSections(sections: FeedSection[]): FeedSection[] {
 	const configuredPriority = useSettingsStore.getState().homeFeedPriority;
 	const sectionToPriorityKey = (section: FeedSection): HomeFeedPrioritySection | null => {
@@ -843,16 +759,6 @@ function prioritizeSections(sections: FeedSection[]): FeedSection[] {
 async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 	const launchData = await client.getLaunchData(getPreferredLanguageHeader());
 	const sections = await buildPreferredSections(client);
-	const trendingSection = await buildTrendingSection(
-		client,
-		Array.isArray(launchData.new_trending) ? launchData.new_trending : undefined,
-		launchData.modules?.new_trending?.subtitle
-	);
-
-	if (trendingSection) {
-		sections.push(trendingSection);
-	}
-
 	const localizedSections = (
 		await Promise.all([
 			buildLocalizedPlaylistSection(
@@ -886,10 +792,6 @@ async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 		const items = launchData[moduleKey];
 
 		if (!title || !Array.isArray(items) || items.length === 0) {
-			continue;
-		}
-
-		if (moduleKey === 'new_trending') {
 			continue;
 		}
 
