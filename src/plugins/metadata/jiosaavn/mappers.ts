@@ -126,11 +126,13 @@ function normalizeImages(images?: JioSaavnArtwork): Artwork[] {
 		return [];
 	}
 
+	const normalizeUrl = (url: string) => url.replace(/^http:\/\//i, 'https://');
+
 	if (typeof images === 'string') {
 		return images
 			? [
 					{
-						url: images,
+						url: normalizeUrl(images),
 					},
 				]
 			: [];
@@ -141,7 +143,7 @@ function normalizeImages(images?: JioSaavnArtwork): Artwork[] {
 		.map((image) => {
 			const size = image.quality.match(/(\d+)x(\d+)/i);
 			return {
-				url: image.url,
+				url: normalizeUrl(image.url),
 				width: size ? parseInt(size[1], 10) : undefined,
 				height: size ? parseInt(size[2], 10) : undefined,
 			};

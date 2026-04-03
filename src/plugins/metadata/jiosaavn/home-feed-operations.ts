@@ -45,6 +45,11 @@ interface PreferredSectionDefinition {
 	subtitle: string;
 }
 
+interface SearchSectionQueryDefinition {
+	preference: Exclude<HomeContentPreference, 'All languages'>;
+	queries: string[];
+}
+
 interface CachedHomeFeedEntry {
 	data: HomeFeedData;
 	cachedAt: number;
@@ -52,6 +57,7 @@ interface CachedHomeFeedEntry {
 
 const PLAYLIST_FETCH_LIMIT = 200;
 const HOME_FEED_CACHE_TTL_MS = 10 * 60 * 1000;
+const HOME_FEED_CACHE_VERSION = 'v2';
 
 const PREFERRED_SECTIONS: PreferredSectionDefinition[] = [
 	{
@@ -83,6 +89,75 @@ const PREFERRED_SECTIONS: PreferredSectionDefinition[] = [
 		query: 'English Hits',
 		title: 'English Picks',
 		subtitle: 'English playlists to balance your home feed',
+	},
+];
+
+const LOCALIZED_CHART_QUERIES: SearchSectionQueryDefinition[] = [
+	{
+		preference: 'Bollywood',
+		queries: ['Hindi: India Superhits Top 50', 'Bollywood Top 50', 'Hindi Top Charts'],
+	},
+	{
+		preference: 'Malayalam',
+		queries: ['Malayalam Superhits Top 50', 'Malayalam Top Charts', 'Malayalam Hits'],
+	},
+	{
+		preference: 'Tamil',
+		queries: ['Tamil Superhits Top 50', 'Tamil Top Charts', 'Tamil Hits'],
+	},
+	{
+		preference: 'Telugu',
+		queries: ['Telugu Superhits Top 50', 'Telugu Top Charts', 'Telugu Hits'],
+	},
+	{
+		preference: 'English',
+		queries: ['English Superhits Top 50', 'English Top Charts', 'English Hits'],
+	},
+];
+
+const LOCALIZED_EDITORIAL_QUERIES: SearchSectionQueryDefinition[] = [
+	{
+		preference: 'Bollywood',
+		queries: ['Bollywood Dance Hits', 'Bollywood Love Songs', 'Bollywood Essentials'],
+	},
+	{
+		preference: 'Malayalam',
+		queries: ['Malayalam Hits', 'Malayalam Love Songs', 'Malayalam Essentials'],
+	},
+	{
+		preference: 'Tamil',
+		queries: ['Tamil Hits', 'Tamil Love Songs', 'Tamil Essentials'],
+	},
+	{
+		preference: 'Telugu',
+		queries: ['Telugu Hits', 'Telugu Love Songs', 'Telugu Essentials'],
+	},
+	{
+		preference: 'English',
+		queries: ['English Hits', 'English Pop Hits', 'English Essentials'],
+	},
+];
+
+const LOCALIZED_NEW_RELEASE_QUERIES: SearchSectionQueryDefinition[] = [
+	{
+		preference: 'Bollywood',
+		queries: ['Hindi New Releases', 'Bollywood New Releases', 'New Hindi Songs'],
+	},
+	{
+		preference: 'Malayalam',
+		queries: ['Malayalam New Releases', 'New Malayalam Songs', 'Latest Malayalam'],
+	},
+	{
+		preference: 'Tamil',
+		queries: ['Tamil New Releases', 'New Tamil Songs', 'Latest Tamil'],
+	},
+	{
+		preference: 'Telugu',
+		queries: ['Telugu New Releases', 'New Telugu Songs', 'Latest Telugu'],
+	},
+	{
+		preference: 'English',
+		queries: ['English New Releases', 'New English Songs', 'Latest English'],
 	},
 ];
 
@@ -120,6 +195,13 @@ function mapPreferenceToApiLanguage(preference: HomeContentPreference): string |
 	}
 }
 
+function getPreferredSearchDefinitions(
+	definitions: SearchSectionQueryDefinition[]
+): SearchSectionQueryDefinition[] {
+	const selected = getSelectedPreferences();
+	return definitions.filter((definition) => selected.includes(definition.preference));
+}
+
 function getPreferredLanguages(): string[] {
 	const preferences = useSettingsStore.getState().homeContentPreferences;
 	if (preferences.includes('All languages')) {
@@ -150,7 +232,7 @@ function getPreferredLanguageHeader(): string {
 
 function getPreferenceSignature(): string {
 	const preferences = useSettingsStore.getState().homeContentPreferences;
-	return preferences.join('|');
+	return `${HOME_FEED_CACHE_VERSION}:${preferences.join('|')}`;
 }
 
 function getItemLanguageSet(item: unknown): Set<string> {
@@ -212,6 +294,33 @@ function sortItemsForPreferences(items: unknown[]): unknown[] {
 		}
 		return 0;
 	});
+}
+
+function interleaveBuckets<T>(buckets: T[][], limit: number): T[] {
+	const queue = buckets.map((bucket) => [...bucket]);
+	const results: T[] = [];
+
+	while (results.length < limit) {
+		let moved = false;
+		for (const bucket of queue) {
+			const next = bucket.shift();
+			if (!next) {
+				continue;
+			}
+
+			results.push(next);
+			moved = true;
+			if (results.length >= limit) {
+				break;
+			}
+		}
+
+		if (!moved) {
+			break;
+		}
+	}
+
+	return results;
 }
 
 function mapMixedFeedItems(items: unknown[]): FeedItem[] {
@@ -406,9 +515,17 @@ function getModuleOrder(modules?: Record<string, JioSaavnLaunchModule>): string[
 		return [];
 	}
 
-	return Object.entries(modules)
+	const ordered = Object.entries(modules)
 		.sort(([, left], [, right]) => (left.position ?? 999) - (right.position ?? 999))
 		.map(([key]) => key);
+
+	const cityModuleIndex = ordered.indexOf('city_mod');
+	if (cityModuleIndex > 4) {
+		const [cityModule] = ordered.splice(cityModuleIndex, 1);
+		ordered.splice(4, 0, cityModule);
+	}
+
+	return ordered;
 }
 
 async function buildPreferredSections(client: JioSaavnClient): Promise<FeedSection[]> {
@@ -441,6 +558,82 @@ async function buildPreferredSections(client: JioSaavnClient): Promise<FeedSecti
 	);
 
 	return sections.filter((section): section is FeedSection => !!section);
+}
+
+async function buildLocalizedPlaylistSection(
+	client: JioSaavnClient,
+	key: string,
+	title: string,
+	subtitle: string,
+	definitions: SearchSectionQueryDefinition[],
+	limit = 12
+): Promise<FeedSection | null> {
+	const buckets = await Promise.all(
+		getPreferredSearchDefinitions(definitions).map(async (definition) => {
+			for (const query of definition.queries) {
+				try {
+					const response = await client.searchPlaylistsWeb(
+						query,
+						1,
+						6,
+						mapPreferenceToApiLanguage(definition.preference) ?? getPreferredLanguageHeader()
+					);
+					const items = response.results
+						.map(mapPlaylistFeed)
+						.filter((playlist): playlist is NonNullable<ReturnType<typeof mapPlaylistFeed>> => !!playlist)
+						.map((playlist) => ({ type: 'playlist' as const, data: playlist }));
+
+					if (items.length > 0) {
+						return items;
+					}
+				} catch {
+					continue;
+				}
+			}
+
+			return [];
+		})
+	);
+
+	return createSection(key, title, interleaveBuckets(buckets, limit), subtitle);
+}
+
+async function buildLocalizedAlbumSection(
+	client: JioSaavnClient,
+	key: string,
+	title: string,
+	subtitle: string,
+	definitions: SearchSectionQueryDefinition[],
+	limit = 12
+): Promise<FeedSection | null> {
+	const buckets = await Promise.all(
+		getPreferredSearchDefinitions(definitions).map(async (definition) => {
+			for (const query of definition.queries) {
+				try {
+					const response = await client.searchAlbumsWeb(
+						query,
+						1,
+						6,
+						mapPreferenceToApiLanguage(definition.preference) ?? getPreferredLanguageHeader()
+					);
+					const items = response.results
+						.map(mapAlbum)
+						.filter((album): album is NonNullable<ReturnType<typeof mapAlbum>> => !!album)
+						.map((album) => ({ type: 'album' as const, data: album }));
+
+					if (items.length > 0) {
+						return items;
+					}
+				} catch {
+					continue;
+				}
+			}
+
+			return [];
+		})
+	);
+
+	return createSection(key, title, interleaveBuckets(buckets, limit), subtitle);
 }
 
 function itemDedupKey(item: FeedItem): string {
@@ -493,6 +686,32 @@ function dedupeSections(sections: FeedSection[]): FeedSection[] {
 async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 	const launchData = await client.getLaunchData(getPreferredLanguageHeader());
 	const sections = await buildPreferredSections(client);
+	const localizedSections = (
+		await Promise.all([
+			buildLocalizedPlaylistSection(
+				client,
+				'localized-charts',
+				'Top Charts',
+				'Chart playlists blended from your selected languages',
+				LOCALIZED_CHART_QUERIES
+			),
+			buildLocalizedAlbumSection(
+				client,
+				'localized-new-releases',
+				'New Releases',
+				'Fresh releases pulled across your selected languages',
+				LOCALIZED_NEW_RELEASE_QUERIES
+			),
+			buildLocalizedPlaylistSection(
+				client,
+				'localized-editorial-picks',
+				'Editorial Picks',
+				'Curated playlists mixed from the languages you selected',
+				LOCALIZED_EDITORIAL_QUERIES
+			),
+		])
+	).filter((section): section is FeedSection => !!section);
+	sections.push(...localizedSections);
 
 	for (const moduleKey of getModuleOrder(launchData.modules)) {
 		const module = launchData.modules?.[moduleKey];
@@ -503,13 +722,17 @@ async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 			continue;
 		}
 
+		if (title === 'Top Charts' || title === 'New Releases' || title === 'Editorial Picks') {
+			continue;
+		}
+
 		const definition = SECTION_DEFINITIONS.find(
 			(candidate) =>
 				(candidate.key === moduleKey || candidate.key.startsWith('promo:')) &&
 				candidate.titleMatcher(title)
 		);
 
-		const scopedItems = sortItemsForPreferences(items);
+		const scopedItems = definition?.key === 'new_trending' ? sortItemsForPreferences(items) : items;
 		const mappedItems = definition ? definition.mapItems(scopedItems) : mapAnyFeedItems(scopedItems);
 		const section = createSection(
 			moduleKey,

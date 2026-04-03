@@ -57,6 +57,28 @@ export class JioSaavnClient {
 		);
 	}
 
+	searchAlbumsWeb(query: string, page = 1, limit = 20, language?: string, signal?: AbortSignal) {
+		return this._webGet<JioSaavnAlbumSearchResponse>(
+			'search.getAlbumResults',
+			{ q: query, p: page, n: limit },
+			{ language, signal }
+		);
+	}
+
+	searchPlaylistsWeb(
+		query: string,
+		page = 1,
+		limit = 20,
+		language?: string,
+		signal?: AbortSignal
+	) {
+		return this._webGet<JioSaavnPlaylistSearchResponse>(
+			'search.getPlaylistResults',
+			{ q: query, p: page, n: limit },
+			{ language, signal }
+		);
+	}
+
 	getSongSuggestions(songId: string, limit = 20, signal?: AbortSignal) {
 		return this._get<JioSaavnSong[]>(`/api/songs/${songId}/suggestions`, { limit }, signal);
 	}
