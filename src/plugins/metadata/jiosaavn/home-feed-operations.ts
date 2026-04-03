@@ -9,7 +9,11 @@ import type {
 	PlaylistTracksPage,
 } from '@plugins/core/interfaces/home-feed-provider';
 import { err, ok, type Result } from '@shared/types/result';
-import { useSettingsStore, type HomeContentPreference } from '@/src/application/state/settings-store';
+import {
+	useSettingsStore,
+	type HomeContentPreference,
+	type HomeFeedPrioritySection,
+} from '@/src/application/state/settings-store';
 import type {
 	JioSaavnLaunchModule,
 	JioSaavnAlbum,
@@ -705,18 +709,36 @@ function dedupeSections(sections: FeedSection[]): FeedSection[] {
 }
 
 function prioritizeSections(sections: FeedSection[]): FeedSection[] {
-	const priorityTitles = [
-		'Trending Now',
-		'Top Charts',
-		'New Releases',
-		"What's Hot In Thiruvananthapuram",
-	];
+	const configuredPriority = useSettingsStore.getState().homeFeedPriority;
+	const sectionToPriorityKey = (section: FeedSection): HomeFeedPrioritySection | null => {
+		switch (section.id) {
+			case 'jiosaavn-new-trending':
+				return 'trending-now';
+			case 'jiosaavn-localized-charts':
+			case 'jiosaavn-charts':
+				return 'top-charts';
+			case 'jiosaavn-localized-new-releases':
+			case 'jiosaavn-new-albums':
+				return 'new-releases';
+			case 'jiosaavn-city-mod':
+				return 'hot-in-thiruvananthapuram';
+			case 'jiosaavn-localized-editorial-picks':
+			case 'jiosaavn-top-playlists':
+				return 'editorial-picks';
+			case 'jiosaavn-radio':
+				return 'radio-stations';
+			case 'jiosaavn-artist-recos':
+				return 'recommended-artist-stations';
+			default:
+				return section.title.trim().toLowerCase() === 'fresh hits' ? 'fresh-hits' : null;
+		}
+	};
 
-	const priorityMap = new Map(priorityTitles.map((title, index) => [title.toLowerCase(), index]));
+	const priorityMap = new Map(configuredPriority.map((key, index) => [key, index]));
 
 	return [...sections].sort((left, right) => {
-		const leftPriority = priorityMap.get(left.title.trim().toLowerCase());
-		const rightPriority = priorityMap.get(right.title.trim().toLowerCase());
+		const leftPriority = priorityMap.get(sectionToPriorityKey(left) ?? '');
+		const rightPriority = priorityMap.get(sectionToPriorityKey(right) ?? '');
 
 		if (leftPriority !== undefined && rightPriority !== undefined) {
 			return leftPriority - rightPriority;

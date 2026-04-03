@@ -27,11 +27,30 @@ export type HomeContentPreference =
 	| 'Marathi'
 	| 'Bengali'
 	| 'Gujarati';
+export type HomeFeedPrioritySection =
+	| 'trending-now'
+	| 'top-charts'
+	| 'new-releases'
+	| 'hot-in-thiruvananthapuram'
+	| 'editorial-picks'
+	| 'radio-stations'
+	| 'recommended-artist-stations'
+	| 'fresh-hits';
 
 export const DEFAULT_HOME_CONTENT_PREFERENCES: HomeContentPreference[] = [
 	'Bollywood',
 	'Malayalam',
 	'Tamil',
+];
+export const DEFAULT_HOME_FEED_PRIORITY: HomeFeedPrioritySection[] = [
+	'trending-now',
+	'top-charts',
+	'new-releases',
+	'hot-in-thiruvananthapuram',
+	'editorial-picks',
+	'radio-stations',
+	'recommended-artist-stations',
+	'fresh-hits',
 ];
 
 export const DEFAULT_TAB_ORDER: TabId[] = ['feed', 'library', 'search', 'downloads'];
@@ -42,6 +61,7 @@ interface SettingsState {
 	themePreference: ThemePreference;
 	defaultTab: DefaultTab;
 	homeContentPreferences: HomeContentPreference[];
+	homeFeedPriority: HomeFeedPrioritySection[];
 	defaultLibraryTab: LibraryTabId;
 	accentColor: string | null;
 	tabOrder: TabId[];
@@ -58,6 +78,10 @@ interface SettingsState {
 	toggleHomeContentPreference: (preference: HomeContentPreference) => void;
 	selectAllHomeContentPreferences: () => void;
 	resetHomeContentPreferences: () => void;
+	setHomeFeedPriority: (priority: HomeFeedPrioritySection[]) => void;
+	moveHomeFeedPriorityUp: (section: HomeFeedPrioritySection) => void;
+	moveHomeFeedPriorityDown: (section: HomeFeedPrioritySection) => void;
+	resetHomeFeedPriority: () => void;
 	setDefaultLibraryTab: (tab: LibraryTabId) => void;
 	setAccentColor: (color: string | null) => void;
 	setTabOrder: (order: TabId[]) => void;
@@ -91,6 +115,7 @@ export const useSettingsStore = create<SettingsState>()(
 			themePreference: 'system',
 			defaultTab: 'feed',
 			homeContentPreferences: DEFAULT_HOME_CONTENT_PREFERENCES,
+			homeFeedPriority: DEFAULT_HOME_FEED_PRIORITY,
 			defaultLibraryTab: 'songs',
 			accentColor: null,
 			tabOrder: DEFAULT_TAB_ORDER,
@@ -142,6 +167,38 @@ export const useSettingsStore = create<SettingsState>()(
 			},
 			resetHomeContentPreferences: () => {
 				set({ homeContentPreferences: DEFAULT_HOME_CONTENT_PREFERENCES });
+			},
+			setHomeFeedPriority: (priority: HomeFeedPrioritySection[]) => {
+				const next = priority.filter(
+					(section, index, array) => array.indexOf(section) === index
+				);
+				set({
+					homeFeedPriority:
+						next.length === DEFAULT_HOME_FEED_PRIORITY.length
+							? next
+							: DEFAULT_HOME_FEED_PRIORITY,
+				});
+			},
+			moveHomeFeedPriorityUp: (section: HomeFeedPrioritySection) => {
+				const current = [...get().homeFeedPriority];
+				const index = current.indexOf(section);
+				if (index <= 0) {
+					return;
+				}
+				[current[index - 1], current[index]] = [current[index], current[index - 1]];
+				set({ homeFeedPriority: current });
+			},
+			moveHomeFeedPriorityDown: (section: HomeFeedPrioritySection) => {
+				const current = [...get().homeFeedPriority];
+				const index = current.indexOf(section);
+				if (index === -1 || index >= current.length - 1) {
+					return;
+				}
+				[current[index], current[index + 1]] = [current[index + 1], current[index]];
+				set({ homeFeedPriority: current });
+			},
+			resetHomeFeedPriority: () => {
+				set({ homeFeedPriority: DEFAULT_HOME_FEED_PRIORITY });
 			},
 			setDefaultLibraryTab: (tab: LibraryTabId) => {
 				set({ defaultLibraryTab: tab });
@@ -197,6 +254,7 @@ export const useSettingsStore = create<SettingsState>()(
 					themePreference: 'system',
 					defaultTab: 'feed',
 					homeContentPreferences: DEFAULT_HOME_CONTENT_PREFERENCES,
+					homeFeedPriority: DEFAULT_HOME_FEED_PRIORITY,
 					defaultLibraryTab: 'songs',
 					accentColor: null,
 					tabOrder: DEFAULT_TAB_ORDER,
@@ -227,6 +285,8 @@ export const useSetDefaultTab = () => useSettingsStore((state) => state.setDefau
 export const useHomeContentPreferences = () =>
 	useSettingsStore((state) => state.homeContentPreferences);
 
+export const useHomeFeedPriority = () => useSettingsStore((state) => state.homeFeedPriority);
+
 export const useSetHomeContentPreferences = () =>
 	useSettingsStore((state) => state.setHomeContentPreferences);
 
@@ -238,6 +298,15 @@ export const useSelectAllHomeContentPreferences = () =>
 
 export const useResetHomeContentPreferences = () =>
 	useSettingsStore((state) => state.resetHomeContentPreferences);
+
+export const useMoveHomeFeedPriorityUp = () =>
+	useSettingsStore((state) => state.moveHomeFeedPriorityUp);
+
+export const useMoveHomeFeedPriorityDown = () =>
+	useSettingsStore((state) => state.moveHomeFeedPriorityDown);
+
+export const useResetHomeFeedPriority = () =>
+	useSettingsStore((state) => state.resetHomeFeedPriority);
 
 export const useAccentColor = () => useSettingsStore((state) => state.accentColor);
 

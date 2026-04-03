@@ -4,8 +4,16 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text, IconButton } from 'react-native-paper';
-import { CheckIcon, CircleIcon, LanguagesIcon, RefreshCwIcon, SettingsIcon } from 'lucide-react-native';
-import { ProfileAvatarButton } from '@/src/components/ui/profile-avatar-button';
+import {
+	CheckIcon,
+	ChevronDownIcon,
+	ChevronUpIcon,
+	CircleIcon,
+	LanguagesIcon,
+	ListOrderedIcon,
+	RefreshCwIcon,
+	SettingsIcon,
+} from 'lucide-react-native';
 import { SettingsBottomSheet } from '@/src/components/settings/settings-bottom-sheet';
 import { SettingsItem } from '@/src/components/settings/settings-item';
 import { useAppTheme, resolveDisplayFont } from '@/lib/theme';
@@ -13,7 +21,11 @@ import { homeFeedService } from '@/src/application/services/home-feed-service';
 import { useActiveDownloadsCount } from '@/src/application/state/download-store';
 import {
 	useHomeContentPreferences,
+	useHomeFeedPriority,
+	useMoveHomeFeedPriorityDown,
+	useMoveHomeFeedPriorityUp,
 	useResetHomeContentPreferences,
+	useResetHomeFeedPriority,
 	useToggleHomeContentPreference,
 	useTabOrder,
 	useEnabledTabs,
@@ -34,6 +46,16 @@ const INDICATOR_HEIGHT = 32;
 const INDICATOR_TOP = 11;
 
 const TAB_SPRING_CONFIG = { damping: 20, stiffness: 200, mass: 0.5 };
+const HOME_FEED_PRIORITY_LABELS = {
+	'trending-now': 'Trending Now',
+	'top-charts': 'Top Charts',
+	'new-releases': 'New Releases',
+	'hot-in-thiruvananthapuram': "What's Hot In Thiruvananthapuram",
+	'editorial-picks': 'Editorial Picks',
+	'radio-stations': 'Radio Stations',
+	'recommended-artist-stations': 'Recommended Artist Stations',
+	'fresh-hits': 'Fresh Hits',
+} as const;
 
 // Lightweight pub/sub so the tab bar can notify the header of active tab
 // changes without re-rendering the parent TabLayout (which would recreate
@@ -124,7 +146,11 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 	const { colors } = useAppTheme();
 	const insets = useSafeAreaInsets();
 	const homeContentPreferences = useHomeContentPreferences();
+	const homeFeedPriority = useHomeFeedPriority();
+	const moveHomeFeedPriorityUp = useMoveHomeFeedPriorityUp();
+	const moveHomeFeedPriorityDown = useMoveHomeFeedPriorityDown();
 	const resetHomeContentPreferences = useResetHomeContentPreferences();
+	const resetHomeFeedPriority = useResetHomeFeedPriority();
 	const toggleHomeContentPreference = useToggleHomeContentPreference();
 	const [preferencesSheetOpen, setPreferencesSheetOpen] = useState(false);
 	const title = TAB_CONFIG[currentTabId]?.title ?? '';
@@ -146,13 +172,6 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 						accessibilityLabel={'Home recommendation preferences'}
 					/>
 					<IconButton
-						icon={() => (
-							<Icon as={RefreshCwIcon} size={20} color={colors.onSurfaceVariant} />
-						)}
-						onPress={() => homeFeedService.fetchHomeFeed({ force: true })}
-						accessibilityLabel={'Refresh recommendations'}
-					/>
-					<IconButton
 						icon={() => <Icon as={SettingsIcon} size={22} color={colors.onSurfaceVariant} />}
 						onPress={() => router.push('/settings')}
 						accessibilityLabel={'Settings'}
@@ -160,11 +179,22 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 				</View>
 				<Text
 					variant={'headlineMedium'}
-					style={{ fontFamily: resolveDisplayFont('700'), color: colors.onSurface }}
+					style={[
+						styles.headerTitle,
+						{ fontFamily: resolveDisplayFont('700'), color: colors.onSurface },
+					]}
 				>
 					{title}
 				</Text>
-				<ProfileAvatarButton />
+				<View style={styles.headerActionSpacer}>
+					<IconButton
+						icon={() => (
+							<Icon as={RefreshCwIcon} size={20} color={colors.onSurfaceVariant} />
+						)}
+						onPress={() => homeFeedService.fetchHomeFeed({ force: true })}
+						accessibilityLabel={'Refresh recommendations'}
+					/>
+				</View>
 			</View>
 
 			<SettingsBottomSheet
@@ -211,6 +241,52 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 							/>
 						}
 						onPress={() => toggleHomeContentPreference(option.value)}
+					/>
+				))}
+				<SettingsItem
+					icon={ListOrderedIcon}
+					title={'Reset home section priority'}
+					subtitle={'Restore the default section order'}
+					onPress={resetHomeFeedPriority}
+				/>
+				{homeFeedPriority.map((section, index) => (
+					<SettingsItem
+						key={section}
+						icon={ListOrderedIcon}
+						title={HOME_FEED_PRIORITY_LABELS[section]}
+						subtitle={`Priority ${index + 1}`}
+						rightElement={
+							<View style={styles.priorityActions}>
+								<IconButton
+									icon={() => (
+										<Icon
+											as={ChevronUpIcon}
+											size={18}
+											color={index === 0 ? colors.outlineVariant : colors.onSurfaceVariant}
+										/>
+									)}
+									disabled={index === 0}
+									onPress={() => moveHomeFeedPriorityUp(section)}
+									accessibilityLabel={`Move ${HOME_FEED_PRIORITY_LABELS[section]} up`}
+								/>
+								<IconButton
+									icon={() => (
+										<Icon
+											as={ChevronDownIcon}
+											size={18}
+											color={
+												index === homeFeedPriority.length - 1
+													? colors.outlineVariant
+													: colors.onSurfaceVariant
+											}
+										/>
+									)}
+									disabled={index === homeFeedPriority.length - 1}
+									onPress={() => moveHomeFeedPriorityDown(section)}
+									accessibilityLabel={`Move ${HOME_FEED_PRIORITY_LABELS[section]} down`}
+								/>
+							</View>
+						}
 					/>
 				))}
 			</SettingsBottomSheet>
@@ -383,11 +459,23 @@ const styles = StyleSheet.create({
 	tabHeader: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		justifyContent: 'space-between',
 		paddingHorizontal: 4,
 		paddingBottom: 4,
 	},
 	headerActions: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		width: 112,
+	},
+	headerActionSpacer: {
+		width: 112,
+		alignItems: 'flex-end',
+	},
+	headerTitle: {
+		flex: 1,
+		textAlign: 'center',
+	},
+	priorityActions: {
 		flexDirection: 'row',
 		alignItems: 'center',
 	},
