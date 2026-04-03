@@ -10,11 +10,9 @@ import {
 	useHomeFeedStore,
 } from '@/src/application/state/home-feed-store';
 import { homeFeedService } from '@/src/application/services/home-feed-service';
-import { useHomeLanguage } from '@/src/application/state/settings-store';
+import { useHomeContentPreferences } from '@/src/application/state/settings-store';
 import { useCuratedContent } from './use-curated-content';
 import type { FeedSection, FeedFilterChip } from '@/src/domain/entities/feed-section';
-
-const HOME_LANGUAGE_ORDER = ['All', 'Hindi', 'English', 'Malayalam', 'Tamil', 'Telugu'] as const;
 
 interface HomeFeedResult {
 	readonly localSections: FeedSection[];
@@ -71,22 +69,18 @@ export function useHomeFeed(): HomeFeedResult {
 	const isRefreshing = useHomeFeedRefreshing();
 	const error = useHomeFeedError();
 	const hasContinuation = useHomeFeedHasContinuation();
-	const homeLanguage = useHomeLanguage();
+	const homeContentPreferences = useHomeContentPreferences();
 	const curated = useCuratedContent(10);
-	const homeLanguageIndex = HOME_LANGUAGE_ORDER.indexOf(homeLanguage);
 
 	useEffect(() => {
 		// Defer the network fetch until after mount animations/interactions
 		// complete so the feed screen paints without blocking on async I/O.
 		const task = InteractionManager.runAfterInteractions(() => {
-			if (homeLanguage === 'All') {
-				homeFeedService.fetchHomeFeed();
-			} else {
-				homeFeedService.applyFilter(homeLanguage, homeLanguageIndex);
-			}
+			useHomeFeedStore.setState({ activeFilterIndex: null });
+			homeFeedService.fetchHomeFeed({ force: true });
 		});
 		return () => task.cancel();
-	}, [homeLanguage, homeLanguageIndex]);
+	}, [homeContentPreferences]);
 
 	const localSections = useMemo(() => buildLocalSections(curated), [curated]);
 
@@ -100,12 +94,8 @@ export function useHomeFeed(): HomeFeedResult {
 
 	const handleClearFilter = useCallback(() => {
 		useHomeFeedStore.setState({ activeFilterIndex: null });
-		if (homeLanguage === 'All') {
-			homeFeedService.fetchHomeFeed({ force: true });
-		} else {
-			homeFeedService.applyFilter(homeLanguage, homeLanguageIndex);
-		}
-	}, [homeLanguage, homeLanguageIndex]);
+		homeFeedService.fetchHomeFeed({ force: true });
+	}, []);
 
 	const handleLoadMore = useCallback(() => {
 		homeFeedService.loadMore();

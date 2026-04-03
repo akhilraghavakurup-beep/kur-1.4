@@ -13,7 +13,6 @@ import { PlayerAwareScrollView } from '@/src/components/ui/player-aware-scroll-v
 import { EmptyState } from '@/src/components/ui/empty-state';
 import {
 	FeedCarousel,
-	FeedFilterChips,
 	FeedSectionSkeleton,
 	HomeFeedSkeleton,
 } from '@/src/components/home';
@@ -29,17 +28,13 @@ const MIN_VISIBLE_SECTIONS = 4;
 export default function HomeScreen() {
 	const { colors } = useAppTheme();
 	const hasCompletedInitialLoad = useHasCompletedInitialLoad();
-	const activeFilterIndex = useHomeFeedStore((state) => state.activeFilterIndex);
 	const {
 		localSections,
 		remoteSections,
-		filterChips,
 		isLoading,
 		isRefreshing,
 		error,
 		handleRefresh,
-		handleApplyFilter,
-		handleClearFilter,
 		handleLoadMore,
 	} = useHomeFeed();
 
@@ -145,14 +140,6 @@ export default function HomeScreen() {
 						{visibleLocalSections.map((section) => (
 							<FeedCarousel key={section.id} section={section} />
 						))}
-						{filterChips.length > 0 && (
-							<FeedFilterChips
-								chips={filterChips}
-								activeIndex={activeFilterIndex}
-								onSelect={handleApplyFilter}
-								onDeselect={handleClearFilter}
-							/>
-						)}
 						{isLoading
 							? Array.from({ length: MIN_VISIBLE_SECTIONS }, (_, i) => (
 									<FeedSectionSkeleton key={`filter-skeleton-${i}`} />

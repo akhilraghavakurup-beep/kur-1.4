@@ -15,7 +15,19 @@ export type ProgressBarStyle =
 	| 'beats'
 	| 'glow-line';
 export type PlayerBackground = 'artwork-blur' | 'artwork-solid' | 'theme-color';
-export type HomeLanguage = 'All' | 'Hindi' | 'English' | 'Malayalam' | 'Tamil' | 'Telugu';
+export type HomeContentPreference =
+	| 'All languages'
+	| 'Bollywood'
+	| 'Malayalam'
+	| 'Tamil'
+	| 'Telugu'
+	| 'English';
+
+export const DEFAULT_HOME_CONTENT_PREFERENCES: HomeContentPreference[] = [
+	'Bollywood',
+	'Malayalam',
+	'Tamil',
+];
 
 export const DEFAULT_TAB_ORDER: TabId[] = ['feed', 'library', 'search', 'downloads'];
 export const DEFAULT_ENABLED_TABS: TabId[] = ['feed', 'library', 'search', 'downloads'];
@@ -24,7 +36,7 @@ export const REQUIRED_TABS: TabId[] = [];
 interface SettingsState {
 	themePreference: ThemePreference;
 	defaultTab: DefaultTab;
-	homeLanguage: HomeLanguage;
+	homeContentPreferences: HomeContentPreference[];
 	defaultLibraryTab: LibraryTabId;
 	accentColor: string | null;
 	tabOrder: TabId[];
@@ -37,7 +49,8 @@ interface SettingsState {
 
 	setThemePreference: (preference: ThemePreference) => void;
 	setDefaultTab: (tab: DefaultTab) => void;
-	setHomeLanguage: (language: HomeLanguage) => void;
+	setHomeContentPreferences: (preferences: HomeContentPreference[]) => void;
+	toggleHomeContentPreference: (preference: HomeContentPreference) => void;
 	setDefaultLibraryTab: (tab: LibraryTabId) => void;
 	setAccentColor: (color: string | null) => void;
 	setTabOrder: (order: TabId[]) => void;
@@ -70,7 +83,7 @@ export const useSettingsStore = create<SettingsState>()(
 		(set, get) => ({
 			themePreference: 'system',
 			defaultTab: 'feed',
-			homeLanguage: 'All',
+			homeContentPreferences: DEFAULT_HOME_CONTENT_PREFERENCES,
 			defaultLibraryTab: 'songs',
 			accentColor: null,
 			tabOrder: DEFAULT_TAB_ORDER,
@@ -87,8 +100,35 @@ export const useSettingsStore = create<SettingsState>()(
 			setDefaultTab: (tab: DefaultTab) => {
 				set({ defaultTab: tab });
 			},
-			setHomeLanguage: (language: HomeLanguage) => {
-				set({ homeLanguage: language });
+			setHomeContentPreferences: (preferences: HomeContentPreference[]) => {
+				const normalized = Array.from(new Set(preferences));
+				set({
+					homeContentPreferences: normalized.includes('All languages')
+						? ['All languages']
+						: normalized.filter((item) => item !== 'All languages'),
+				});
+			},
+			toggleHomeContentPreference: (preference: HomeContentPreference) => {
+				const { homeContentPreferences } = get();
+
+				if (preference === 'All languages') {
+					set({
+						homeContentPreferences: homeContentPreferences.includes('All languages')
+							? DEFAULT_HOME_CONTENT_PREFERENCES
+							: ['All languages'],
+					});
+					return;
+				}
+
+				const withoutAll = homeContentPreferences.filter((item) => item !== 'All languages');
+				const nextPreferences = withoutAll.includes(preference)
+					? withoutAll.filter((item) => item !== preference)
+					: [...withoutAll, preference];
+
+				set({
+					homeContentPreferences:
+						nextPreferences.length > 0 ? nextPreferences : DEFAULT_HOME_CONTENT_PREFERENCES,
+				});
 			},
 			setDefaultLibraryTab: (tab: LibraryTabId) => {
 				set({ defaultLibraryTab: tab });
@@ -143,7 +183,7 @@ export const useSettingsStore = create<SettingsState>()(
 				set({
 					themePreference: 'system',
 					defaultTab: 'feed',
-					homeLanguage: 'All',
+					homeContentPreferences: DEFAULT_HOME_CONTENT_PREFERENCES,
 					defaultLibraryTab: 'songs',
 					accentColor: null,
 					tabOrder: DEFAULT_TAB_ORDER,
@@ -171,9 +211,14 @@ export const useDefaultTab = () => useSettingsStore((state) => state.defaultTab)
 
 export const useSetDefaultTab = () => useSettingsStore((state) => state.setDefaultTab);
 
-export const useHomeLanguage = () => useSettingsStore((state) => state.homeLanguage);
+export const useHomeContentPreferences = () =>
+	useSettingsStore((state) => state.homeContentPreferences);
 
-export const useSetHomeLanguage = () => useSettingsStore((state) => state.setHomeLanguage);
+export const useSetHomeContentPreferences = () =>
+	useSettingsStore((state) => state.setHomeContentPreferences);
+
+export const useToggleHomeContentPreference = () =>
+	useSettingsStore((state) => state.toggleHomeContentPreference);
 
 export const useAccentColor = () => useSettingsStore((state) => state.accentColor);
 

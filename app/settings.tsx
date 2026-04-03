@@ -31,7 +31,7 @@ import {
 import {
 	THEME_OPTIONS,
 	DEFAULT_TAB_OPTIONS,
-	HOME_LANGUAGE_OPTIONS,
+	HOME_CONTENT_PREFERENCE_OPTIONS,
 	PLAYER_BACKGROUND_OPTIONS,
 	STREAM_QUALITY_OPTIONS,
 } from '@/lib/settings-config';
@@ -53,8 +53,8 @@ export default function SettingsScreen() {
 		setThemePreference,
 		defaultTab,
 		setDefaultTab,
-		homeLanguage,
-		setHomeLanguage,
+		homeContentPreferences,
+		toggleHomeContentPreference,
 		accentColor,
 		setAccentColor,
 		openPlayerOnTrackClick,
@@ -193,14 +193,34 @@ export default function SettingsScreen() {
 						onValueChange={setDefaultTab}
 						portalName={'default-tab-select'}
 					/>
-					<SettingsSelect
+					<SettingsItem
 						icon={MusicIcon}
-						title={'Home language'}
-						options={HOME_LANGUAGE_OPTIONS}
-						value={homeLanguage}
-						onValueChange={setHomeLanguage}
-						portalName={'home-language-select'}
+						title={'Home recommendations'}
+						subtitle={
+							homeContentPreferences.includes('All languages')
+								? 'All languages'
+								: homeContentPreferences.join(', ')
+						}
 					/>
+					{HOME_CONTENT_PREFERENCE_OPTIONS.map((option) => (
+						<SettingsItem
+							key={option.value}
+							icon={option.icon}
+							title={option.label}
+							subtitle={
+								option.value === 'All languages'
+									? 'Use broad JioSaavn discovery across all supported languages'
+									: `Boost ${option.label} suggestions on the home screen`
+							}
+							rightElement={
+								<Switch
+									value={homeContentPreferences.includes(option.value)}
+									onValueChange={() => toggleHomeContentPreference(option.value)}
+								/>
+							}
+							onPress={() => toggleHomeContentPreference(option.value)}
+						/>
+					))}
 					<TabOrderSetting />
 					<SettingsItem
 						icon={TagIcon}

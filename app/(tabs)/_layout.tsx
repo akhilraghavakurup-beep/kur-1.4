@@ -4,16 +4,21 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text, IconButton } from 'react-native-paper';
-import { SettingsIcon } from 'lucide-react-native';
+import { LanguagesIcon, SettingsIcon } from 'lucide-react-native';
 import { ProfileAvatarButton } from '@/src/components/ui/profile-avatar-button';
+import { SettingsBottomSheet } from '@/src/components/settings/settings-bottom-sheet';
+import { SettingsItem } from '@/src/components/settings/settings-item';
 import { useAppTheme, resolveDisplayFont } from '@/lib/theme';
 import { useActiveDownloadsCount } from '@/src/application/state/download-store';
 import {
+	useHomeContentPreferences,
+	useToggleHomeContentPreference,
 	useTabOrder,
 	useEnabledTabs,
 	type TabId,
 	DEFAULT_TAB_ORDER,
 } from '@/src/application/state/settings-store';
+import { HOME_CONTENT_PREFERENCE_OPTIONS } from '@/lib/settings-config';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { TAB_CONFIG, TAB_BAR_HEIGHT } from '@/lib/tab-config';
 import { LottieTabIcon } from '@/src/components/ui/lottie-tab-icon';
@@ -116,27 +121,80 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 	const currentTabId = useActiveTabListener(initialTabId);
 	const { colors } = useAppTheme();
 	const insets = useSafeAreaInsets();
+	const homeContentPreferences = useHomeContentPreferences();
+	const toggleHomeContentPreference = useToggleHomeContentPreference();
+	const [preferencesSheetOpen, setPreferencesSheetOpen] = useState(false);
 	const title = TAB_CONFIG[currentTabId]?.title ?? '';
+
 	return (
-		<View
-			style={[
-				styles.tabHeader,
-				{ paddingTop: insets.top, backgroundColor: colors.background },
-			]}
-		>
-			<IconButton
-				icon={() => <Icon as={SettingsIcon} size={22} color={colors.onSurfaceVariant} />}
-				onPress={() => router.push('/settings')}
-				accessibilityLabel={'Settings'}
-			/>
-			<Text
-				variant={'headlineMedium'}
-				style={{ fontFamily: resolveDisplayFont('700'), color: colors.onSurface }}
+		<>
+			<View
+				style={[
+					styles.tabHeader,
+					{ paddingTop: insets.top, backgroundColor: colors.background },
+				]}
 			>
-				{title}
-			</Text>
-			<ProfileAvatarButton />
-		</View>
+				<View style={styles.headerActions}>
+					<IconButton
+						icon={() => (
+							<Icon as={LanguagesIcon} size={22} color={colors.onSurfaceVariant} />
+						)}
+						onPress={() => setPreferencesSheetOpen(true)}
+						accessibilityLabel={'Home recommendation preferences'}
+					/>
+					<IconButton
+						icon={() => <Icon as={SettingsIcon} size={22} color={colors.onSurfaceVariant} />}
+						onPress={() => router.push('/settings')}
+						accessibilityLabel={'Settings'}
+					/>
+				</View>
+				<Text
+					variant={'headlineMedium'}
+					style={{ fontFamily: resolveDisplayFont('700'), color: colors.onSurface }}
+				>
+					{title}
+				</Text>
+				<ProfileAvatarButton />
+			</View>
+
+			<SettingsBottomSheet
+				isOpen={preferencesSheetOpen}
+				onClose={() => setPreferencesSheetOpen(false)}
+				portalName={'home-preferences-sheet'}
+				title={'Home recommendations'}
+			>
+				{HOME_CONTENT_PREFERENCE_OPTIONS.map((option) => (
+					<SettingsItem
+						key={option.value}
+						icon={option.icon}
+						title={option.label}
+						subtitle={
+							option.value === 'All languages'
+								? 'Use broad discovery across all supported languages'
+								: `Boost ${option.label} suggestions on the home screen`
+						}
+						rightElement={
+							<IconButton
+								icon={() => (
+									<Icon
+										as={option.value === 'All languages' ? LanguagesIcon : option.icon}
+										size={18}
+										color={
+											homeContentPreferences.includes(option.value)
+												? colors.primary
+												: colors.onSurfaceVariant
+										}
+									/>
+								)}
+								onPress={() => toggleHomeContentPreference(option.value)}
+								accessibilityLabel={option.label}
+							/>
+						}
+						onPress={() => toggleHomeContentPreference(option.value)}
+					/>
+				))}
+			</SettingsBottomSheet>
+		</>
 	);
 }
 
@@ -308,6 +366,10 @@ const styles = StyleSheet.create({
 		justifyContent: 'space-between',
 		paddingHorizontal: 4,
 		paddingBottom: 4,
+	},
+	headerActions: {
+		flexDirection: 'row',
+		alignItems: 'center',
 	},
 	tabBarContainer: {
 		position: 'relative',

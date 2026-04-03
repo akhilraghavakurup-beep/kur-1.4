@@ -17,7 +17,7 @@ import {
 import type {
 	ThemePreference,
 	DefaultTab,
-	HomeLanguage,
+	HomeContentPreference,
 	LibraryTabId,
 	PlayerBackground,
 } from '@/src/application/state/settings-store';
@@ -36,13 +36,13 @@ export const DEFAULT_TAB_OPTIONS: { value: DefaultTab; label: string; icon: Luci
 	{ value: 'downloads', label: 'Downloads', icon: DownloadIcon },
 ];
 
-export const HOME_LANGUAGE_OPTIONS: {
-	value: HomeLanguage;
+export const HOME_CONTENT_PREFERENCE_OPTIONS: {
+	value: HomeContentPreference;
 	label: string;
 	icon: LucideIcon;
 }[] = [
-	{ value: 'All', label: 'All', icon: NewspaperIcon },
-	{ value: 'Hindi', label: 'Hindi', icon: MusicIcon },
+	{ value: 'All languages', label: 'All languages', icon: NewspaperIcon },
+	{ value: 'Bollywood', label: 'Bollywood', icon: MusicIcon },
 	{ value: 'English', label: 'English', icon: MusicIcon },
 	{ value: 'Malayalam', label: 'Malayalam', icon: MusicIcon },
 	{ value: 'Tamil', label: 'Tamil', icon: MusicIcon },

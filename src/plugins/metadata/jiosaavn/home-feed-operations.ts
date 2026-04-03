@@ -1,5 +1,4 @@
 import type {
-	FeedFilterChip,
 	FeedItem,
 	FeedSection,
 	HomeFeedData,
@@ -10,6 +9,7 @@ import type {
 	PlaylistTracksPage,
 } from '@plugins/core/interfaces/home-feed-provider';
 import { err, ok, type Result } from '@shared/types/result';
+import { useSettingsStore, type HomeContentPreference } from '@/src/application/state/settings-store';
 import type {
 	JioSaavnLaunchModule,
 	JioSaavnAlbum,
@@ -31,26 +31,12 @@ export type {
 	PlaylistTracksPage,
 } from '@plugins/core/interfaces/home-feed-provider';
 
-interface BrowsePreset {
-	label: string;
-	language: string;
-}
-
 interface SectionDefinition {
 	key: string;
 	titleMatcher: (title: string) => boolean;
 	mapItems: (items: unknown[]) => FeedItem[];
 	subtitle?: string;
 }
-
-const BROWSE_PRESETS: BrowsePreset[] = [
-	{ label: 'All', language: 'hindi,english' },
-	{ label: 'Hindi', language: 'hindi' },
-	{ label: 'English', language: 'english' },
-	{ label: 'Malayalam', language: 'malayalam' },
-	{ label: 'Tamil', language: 'tamil' },
-	{ label: 'Telugu', language: 'telugu' },
-];
 
 const PLAYLIST_FETCH_LIMIT = 200;
 
@@ -70,28 +56,100 @@ function normalizeLanguageTokens(value?: string | null): string[] {
 		.filter(Boolean);
 }
 
-function itemMatchesLanguage(item: unknown, language: string): boolean {
+function mapPreferenceToApiLanguage(preference: HomeContentPreference): string | null {
+	switch (preference) {
+		case 'Bollywood':
+			return 'hindi';
+		case 'Malayalam':
+			return 'malayalam';
+		case 'Tamil':
+			return 'tamil';
+		case 'Telugu':
+			return 'telugu';
+		case 'English':
+			return 'english';
+		case 'All languages':
+		default:
+			return null;
+	}
+}
+
+function getPreferredLanguages(): string[] {
+	const preferences = useSettingsStore.getState().homeContentPreferences;
+	if (preferences.includes('All languages')) {
+		return ['hindi', 'english', 'malayalam', 'tamil', 'telugu'];
+	}
+
+	const mapped = preferences
+		.map(mapPreferenceToApiLanguage)
+		.filter((value): value is string => !!value);
+
+	return mapped.length > 0 ? mapped : ['hindi', 'malayalam', 'tamil'];
+}
+
+function getPreferredLanguageHeader(): string {
+	return getPreferredLanguages().join(',');
+}
+
+function getItemLanguageSet(item: unknown): Set<string> {
 	if (!item || typeof item !== 'object') {
-		return false;
+		return new Set();
 	}
 
 	const candidate = item as {
 		language?: string | null;
 		dominantLanguage?: string | null;
-		more_info?: { language?: string | null } | null;
+		subtitle?: string | null;
+		title?: string | null;
+		name?: string | null;
+		more_info?: { language?: string | null; query?: string | null } | null;
 	};
 
-	const languages = [
+	const languages = new Set<string>([
 		...normalizeLanguageTokens(candidate.language),
 		...normalizeLanguageTokens(candidate.dominantLanguage),
 		...normalizeLanguageTokens(candidate.more_info?.language),
-	];
+	]);
 
-	if (languages.length === 0) {
-		return false;
+	const text = [
+		candidate.subtitle,
+		candidate.title,
+		candidate.name,
+		candidate.more_info?.query,
+	]
+		.filter(Boolean)
+		.join(' ')
+		.toLowerCase();
+
+	if (text.includes('bollywood')) {
+		languages.add('hindi');
 	}
 
-	return languages.includes(language);
+	return languages;
+}
+
+function scoreItemForPreferences(item: unknown, preferredLanguages: string[]): number {
+	const itemLanguages = getItemLanguageSet(item);
+	if (itemLanguages.size === 0) {
+		return 0;
+	}
+
+	return preferredLanguages.reduce((score, language, index) => {
+		return itemLanguages.has(language) ? score + (preferredLanguages.length - index) * 10 : score;
+	}, 0);
+}
+
+function sortItemsForPreferences(items: unknown[]): unknown[] {
+	const preferredLanguages = getPreferredLanguages();
+	return [...items].sort((left, right) => {
+		const scoreDiff =
+			scoreItemForPreferences(right, preferredLanguages) -
+			scoreItemForPreferences(left, preferredLanguages);
+		if (scoreDiff !== 0) {
+			return scoreDiff;
+		}
+		return 0;
+	});
 }
 
 function mapMixedFeedItems(items: unknown[]): FeedItem[] {
@@ -195,23 +253,6 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
 	},
 ];
 
-function findPreset(chipText?: string): BrowsePreset {
-	if (!chipText) {
-		return BROWSE_PRESETS[0];
-	}
-	return (
-		BROWSE_PRESETS.find((preset) => preset.label.toLowerCase() === chipText.toLowerCase()) ??
-		BROWSE_PRESETS[0]
-	);
-}
-
-function buildFilterChips(selected: string): FeedFilterChip[] {
-	return BROWSE_PRESETS.map((preset) => ({
-		text: preset.label,
-		isSelected: preset.label === selected,
-	}));
-}
-
 function createSection(
 	key: string,
 	title: string,
@@ -241,10 +282,9 @@ function getModuleOrder(modules?: Record<string, JioSaavnLaunchModule>): string[
 		.map(([key]) => key);
 }
 
-async function buildHomeFeed(client: JioSaavnClient, preset: BrowsePreset): Promise<HomeFeedData> {
-	const launchData = await client.getLaunchData(preset.language);
+async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
+	const launchData = await client.getLaunchData(getPreferredLanguageHeader());
 	const sections: FeedSection[] = [];
-	const singleLanguage = preset.language.includes(',') ? null : preset.language;
 
 	for (const moduleKey of getModuleOrder(launchData.modules)) {
 		const module = launchData.modules?.[moduleKey];
@@ -264,8 +304,7 @@ async function buildHomeFeed(client: JioSaavnClient, preset: BrowsePreset): Prom
 			continue;
 		}
 
-		const scopedItems =
-			singleLanguage === null ? items : items.filter((item) => itemMatchesLanguage(item, singleLanguage));
+		const scopedItems = sortItemsForPreferences(items);
 		const mappedItems = definition.mapItems(scopedItems);
 		const section = createSection(moduleKey, title, mappedItems, definition.subtitle ?? module.subtitle);
 		if (section) {
@@ -275,28 +314,24 @@ async function buildHomeFeed(client: JioSaavnClient, preset: BrowsePreset): Prom
 
 	return {
 		sections,
-		filterChips: buildFilterChips(preset.label),
+		filterChips: [],
 		hasContinuation: false,
 	};
 }
 
 export function createHomeFeedOperations(client: JioSaavnClient): HomeFeedOperations {
-	let selectedFilter = BROWSE_PRESETS[0].label;
-
 	return {
 		async getHomeFeed(): Promise<Result<HomeFeedData, Error>> {
 			try {
-				selectedFilter = BROWSE_PRESETS[0].label;
-				return ok(await buildHomeFeed(client, findPreset(selectedFilter)));
+				return ok(await buildHomeFeed(client));
 			} catch (error) {
 				return err(error instanceof Error ? error : new Error(String(error)));
 			}
 		},
 
-		async applyFilter(chipText: string): Promise<Result<HomeFeedData, Error>> {
+		async applyFilter(_chipText: string): Promise<Result<HomeFeedData, Error>> {
 			try {
-				selectedFilter = findPreset(chipText).label;
-				return ok(await buildHomeFeed(client, findPreset(selectedFilter)));
+				return ok(await buildHomeFeed(client));
 			} catch (error) {
 				return err(error instanceof Error ? error : new Error(String(error)));
 			}
@@ -305,7 +340,7 @@ export function createHomeFeedOperations(client: JioSaavnClient): HomeFeedOperat
 		async loadMore(): Promise<Result<HomeFeedData, Error>> {
 			return ok({
 				sections: [],
-				filterChips: buildFilterChips(selectedFilter),
+				filterChips: [],
 				hasContinuation: false,
 			});
 		},
