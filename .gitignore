@@ -1,0 +1,85 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Build output
+out/
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# Design source files (not needed in builds)
+*.ai
+*.psd
+*.sketch
+
+# local env files
+.env
+.env*.local
+credentials.json
+ios/certs/*
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders
+/ios
+/android
+
+.idea/
+
+# Local modules build artifacts
+modules/*/android/build/
+modules/*/ios/build/
+
+# Claude Code
+.ai/
+.claude/
+.agents/
+skills-lock.json
+
+# Ruby/Fastlane
+Gemfile.lock
+vendor/bundle/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+# Build artifacts
+build/
+out/
+
+# Fastlane auto-generated
+fastlane/README.md

@@ -1,0 +1,282 @@
+import { useEffect, useMemo } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
+import { SearchIcon, UserIcon } from 'lucide-react-native';
+import { Text, Button, IconButton } from 'react-native-paper';
+import { Icon } from '@/src/components/ui/icon';
+import { Skeleton } from '@/src/components/ui/skeleton';
+import { TrackListSkeleton } from '@/src/components/skeletons';
+import { DetailsPage, useDetailsPageHeaderColors } from '@/src/components/details-page';
+import { TrackListItem } from '@/src/components/media-list/track-list-item';
+import { AlbumCard } from '@/src/components/media-list/album-card';
+import { useLibraryArtistTracks } from '@/src/hooks/use-library-artist-tracks';
+import { getArtistName } from '@/src/domain/utils/artist-utils';
+import {
+	useArtistDetail,
+	useArtistLoading,
+	useArtistError,
+} from '@/src/application/state/artist-store';
+import { useAlbumStore } from '@/src/application/state/album-store';
+import { artistService } from '@/src/application/services/artist-service';
+import { getBestArtwork } from '@/src/domain/value-objects/artwork';
+import { useAppTheme } from '@/lib/theme';
+import { formatListeners } from '@/src/domain/utils/formatting';
+import type { Album } from '@/src/domain/entities/album';
+import type {
+	DetailsHeaderInfo,
+	MetadataLine,
+	DetailsPageSection,
+} from '@/src/components/details-page';
+
+export default function ArtistScreen() {
+	const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
+	const { colors } = useAppTheme();
+
+	const libraryTracks = useLibraryArtistTracks(id);
+	const artistDetail = useArtistDetail(id);
+	const isLoading = useArtistLoading(id);
+	const error = useArtistError(id);
+
+	useEffect(() => {
+		artistService.getArtistDetail(id);
+	}, [id]);
+
+	const artistInfo = artistDetail.artist
+		? {
+				name: artistDetail.artist.name,
+				artwork: getBestArtwork(artistDetail.artist.artwork, 200)?.url,
+				monthlyListeners: artistDetail.artist.monthlyListeners,
+			}
+		: {
+				name: getArtistName(libraryTracks, id, name),
+				artwork: undefined,
+				monthlyListeners: undefined,
+			};
+
+	const hasData =
+		artistDetail.artist !== null ||
+		artistDetail.topTracks.length > 0 ||
+		artistDetail.stationTracks.length > 0 ||
+		libraryTracks.length > 0;
+	const albums = artistDetail.albums;
+	const topTracks = artistDetail.topTracks;
+	const stationTracks = artistDetail.stationTracks;
+
+	const handleSearchArtist = () => {
+		router.push({
+			pathname: '/search',
+			params: { query: artistInfo.name },
+		});
+	};
+
+	const handleAlbumPress = (album: Album) => {
+		useAlbumStore.getState().setAlbumPreview(album);
+		router.push({
+			pathname: '/album/[id]',
+			params: { id: album.id.value, name: album.name },
+		});
+	};
+
+	const headerRightActions = <SearchAction onPress={handleSearchArtist} />;
+
+	const metadata: MetadataLine[] = useMemo(() => {
+		const lines: MetadataLine[] = [];
+		if (artistInfo.monthlyListeners) {
+			lines.push({
+				text: formatListeners(artistInfo.monthlyListeners, 'monthly listeners')!,
+				variant: 'primary',
+			});
+		}
+		if (libraryTracks.length > 0) {
+			lines.push({
+				text: `${libraryTracks.length} ${libraryTracks.length === 1 ? 'track' : 'tracks'} in library`,
+			});
+		}
+		return lines;
+	}, [artistInfo.monthlyListeners, libraryTracks.length]);
+
+	const headerInfo: DetailsHeaderInfo = {
+		title: artistInfo.name,
+		artworkUrl: artistInfo.artwork,
+		artworkShape: 'circular',
+		placeholderIcon: UserIcon,
+		metadata,
+	};
+
+	const sections: DetailsPageSection[] = useMemo(() => {
+		const result: DetailsPageSection[] = [];
+
+		if (albums.length > 0) {
+			result.push({
+				key: 'albums',
+				title: 'Albums',
+				horizontal: true,
+				content: (
+					<>
+						{albums.map((album) => (
+							<AlbumCard
+								key={album.id.value}
+								album={album}
+								onPress={() => handleAlbumPress(album)}
+							/>
+						))}
+					</>
+				),
+			});
+		}
+
+		if (topTracks.length > 0) {
+			result.push({
+				key: 'top-tracks',
+				title: 'Top Tracks',
+				content: (
+					<View style={styles.trackList}>
+						{topTracks.map((track, index) => (
+							<TrackListItem
+								key={track.id.value}
+								track={track}
+								source={'search'}
+								queue={topTracks}
+								queueIndex={index}
+							/>
+						))}
+					</View>
+				),
+			});
+		}
+
+		if (stationTracks.length > 0) {
+			result.push({
+				key: 'artist-station',
+				title: 'Artist Station',
+				content: (
+					<View style={styles.trackList}>
+						{stationTracks.map((track, index) => (
+							<TrackListItem
+								key={`${track.id.value}-station`}
+								track={track}
+								source={'search'}
+								queue={stationTracks}
+								queueIndex={index}
+							/>
+						))}
+					</View>
+				),
+			});
+		}
+
+		if (libraryTracks.length > 0) {
+			result.push({
+				key: 'library',
+				title: 'In Your Library',
+				content: (
+					<View style={styles.trackList}>
+						{libraryTracks.map((track, index) => (
+							<TrackListItem
+								key={track.id.value}
+								track={track}
+								source={'library'}
+								queue={libraryTracks}
+								queueIndex={index}
+							/>
+						))}
+					</View>
+				),
+			});
+		}
+
+		return result;
+	}, [albums, topTracks, stationTracks, libraryTracks]);
+
+	const emptyContent = (() => {
+		if (isLoading && !hasData) {
+			return (
+				<View style={styles.loadingState}>
+					<TrackListSkeleton count={6} />
+				</View>
+			);
+		}
+
+		if (error && !hasData) {
+			return (
+				<View style={styles.emptyState}>
+					<Text
+						variant={'bodyMedium'}
+						style={{ color: colors.onSurfaceVariant, textAlign: 'center' }}
+					>
+						{error}
+					</Text>
+					<Button mode={'text'} onPress={handleSearchArtist}>
+						Search instead
+					</Button>
+				</View>
+			);
+		}
+
+		if (
+			albums.length === 0 &&
+			topTracks.length === 0 &&
+			stationTracks.length === 0 &&
+			libraryTracks.length === 0
+		) {
+			return (
+				<View style={styles.emptyState}>
+					<Text variant={'bodyMedium'} style={{ color: colors.onSurfaceVariant }}>
+						No content found for this artist
+					</Text>
+					<Button mode={'text'} onPress={handleSearchArtist}>Search for tracks</Button>
+				</View>
+			);
+		}
+
+		return undefined;
+	})();
+
+	const headerSkeleton = (
+		<View style={styles.headerSkeleton}>
+			<Skeleton width={200} height={200} rounded={'full'} />
+			<Skeleton width={160} height={24} rounded={'md'} />
+			<Skeleton width={120} height={14} rounded={'md'} />
+		</View>
+	);
+
+	return (
+		<DetailsPage
+			headerInfo={headerInfo}
+			headerRightActions={headerRightActions}
+			isLoading={isLoading && !hasData}
+			loadingContent={headerSkeleton}
+			sections={emptyContent ? [] : sections}
+			emptyContent={emptyContent}
+		/>
+	);
+}
+
+function SearchAction({ onPress }: { readonly onPress: () => void }) {
+	const colors = useDetailsPageHeaderColors();
+	return (
+		<IconButton
+			icon={() => <Icon as={SearchIcon} size={22} color={colors.onSurface} />}
+			onPress={onPress}
+		/>
+	);
+}
+
+const styles = StyleSheet.create({
+	trackList: {
+		gap: 8,
+		paddingHorizontal: 24,
+	},
+	headerSkeleton: {
+		alignItems: 'center',
+		paddingVertical: 48,
+		gap: 8,
+	},
+	loadingState: {
+		paddingHorizontal: 24,
+	},
+	emptyState: {
+		paddingVertical: 48,
+		alignItems: 'center',
+	},
+});

@@ -1,0 +1,285 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch:
+        inputs:
+            version:
+                description: 'Version to release (e.g., 1.0.0)'
+                required: true
+                type: string
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false
+
+env:
+    VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+    validate:
+        name: Validate Release
+        runs-on: self-hosted
+        permissions:
+            contents: write
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Extract version
+              id: version
+              run: |
+                  VERSION="${{ env.VERSION }}"
+                  VERSION="${VERSION#v}"
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Releasing version: $VERSION"
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 20
+                  cache: 'npm'
+
+            - name: Bump version in config files
+              run: |
+                  VERSION="${{ steps.version.outputs.version }}"
+                  # Update package.json
+                  npm version "$VERSION" --no-git-tag-version --allow-same-version
+                  # Update app.json
+                  node -e "
+                    const fs = require('fs');
+                    const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+                    app.expo.version = '$VERSION';
+                    fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
+                  "
+                  # Format modified files with Prettier
+                  npx prettier --write app.json package.json
+                  echo "Updated versions to $VERSION"
+
+            - name: Commit version bump
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git add package.json package-lock.json app.json
+                  git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+                  git push
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Run quality checks
+              run: |
+                  npm run lint
+                  npm run format:check
+                  npx tsc --noEmit
+                  npm run test:run
+
+            - name: Run Expo checks
+              run: |
+                  npx expo-doctor
+                  npx expo install --check
+
+    build-android:
+        name: Build Android
+        runs-on: self-hosted
+        needs: validate
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  ref: main
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 20
+                  cache: 'npm'
+
+            - name: Setup Java
+              uses: actions/setup-java@v4
+              with:
+                  distribution: 'temurin'
+                  java-version: '17'
+
+            - name: Setup Android SDK
+              uses: android-actions/setup-android@v3
+
+            - name: Install Ninja
+              run: |
+                  if command -v ninja &> /dev/null; then
+                    echo "Ninja already installed"
+                    exit 0
+                  fi
+                  if command -v apt-get &> /dev/null; then
+                    sudo apt-get update && sudo apt-get install -y ninja-build
+                  elif command -v brew &> /dev/null; then
+                    brew install ninja
+                  fi
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Generate native project
+              run: npx expo prebuild --platform android --clean
+
+            - name: Build Debug APK
+              working-directory: android
+              run: ./gradlew assembleDebug
+
+            - name: Build Release APK
+              working-directory: android
+              run: ./gradlew assembleRelease
+
+            - name: Upload Debug APK
+              uses: actions/upload-artifact@v4
+              with:
+                  name: aria-${{ needs.validate.outputs.version }}-debug
+                  path: android/app/build/outputs/apk/debug/app-debug.apk
+                  retention-days: 90
+
+            - name: Upload Release APK
+              uses: actions/upload-artifact@v4
+              with:
+                  name: aria-${{ needs.validate.outputs.version }}-release
+                  path: android/app/build/outputs/apk/release/app-release.apk
+                  retention-days: 90
+
+    build-ios:
+        name: Build iOS
+        runs-on: macos-latest
+        needs: validate
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  ref: main
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 20
+                  cache: 'npm'
+
+            - name: Setup Ruby
+              uses: ruby/setup-ruby@v1
+              with:
+                  ruby-version: '3.2'
+                  bundler-cache: true
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Generate native project
+              run: npx expo prebuild --platform ios --clean
+
+            - name: Install Pods
+              working-directory: ios
+              run: bundle exec pod install
+
+            - name: Setup SSH for Match
+              uses: webfactory/ssh-agent@v0.9.0
+              with:
+                  ssh-private-key: ${{ secrets.ARIA_CERTIFICATES_DEPLOY_KEY }}
+
+            - name: Build iOS with Fastlane
+              env:
+                  MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+                  MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+                  FASTLANE_USER: ${{ secrets.APPLE_ID }}
+                  FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+              run: bundle exec fastlane ios build_adhoc
+
+            - name: Upload IPA
+              uses: actions/upload-artifact@v4
+              with:
+                  name: aria-${{ needs.validate.outputs.version }}-ios
+                  path: build/Aria.ipa
+                  retention-days: 90
+
+    create-release:
+        name: Create GitHub Release
+        runs-on: self-hosted
+        needs: [validate, build-android, build-ios]
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Download Debug APK
+              uses: actions/download-artifact@v4
+              with:
+                  name: aria-${{ needs.validate.outputs.version }}-debug
+                  path: artifacts/debug
+
+            - name: Download Release APK
+              uses: actions/download-artifact@v4
+              with:
+                  name: aria-${{ needs.validate.outputs.version }}-release
+                  path: artifacts/release
+
+            - name: Download iOS IPA
+              uses: actions/download-artifact@v4
+              with:
+                  name: aria-${{ needs.validate.outputs.version }}-ios
+                  path: artifacts/ios
+
+            - name: Rename artifacts
+              run: |
+                  mv artifacts/debug/app-debug.apk artifacts/aria-${{ needs.validate.outputs.version }}-debug.apk
+                  mv artifacts/release/app-release.apk artifacts/aria-${{ needs.validate.outputs.version }}-release.apk
+                  mv artifacts/ios/Aria.ipa artifacts/aria-${{ needs.validate.outputs.version }}.ipa
+
+            - name: Generate changelog
+              id: changelog
+              run: |
+                  CURRENT_TAG="v${{ needs.validate.outputs.version }}"
+                  # Get all tags sorted by version, find the one before current
+                  PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -v "^${CURRENT_TAG}$" | head -1)
+                  if [ -n "$PREVIOUS_TAG" ]; then
+                    echo "Generating changelog from $PREVIOUS_TAG to HEAD"
+                    CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+                  else
+                    echo "No previous tag found, generating full changelog"
+                    CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+                  fi
+                  echo "changelog<<EOF" >> $GITHUB_OUTPUT
+                  echo "$CHANGELOG" >> $GITHUB_OUTPUT
+                  echo "EOF" >> $GITHUB_OUTPUT
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: v${{ needs.validate.outputs.version }}
+                  name: Release v${{ needs.validate.outputs.version }}
+                  body: |
+                      ## What's Changed
+
+                      ${{ steps.changelog.outputs.changelog }}
+
+                      ## Downloads
+
+                      | File | Platform | Description |
+                      |------|----------|-------------|
+                      | `aria-${{ needs.validate.outputs.version }}-debug.apk` | Android | Debug build for testing |
+                      | `aria-${{ needs.validate.outputs.version }}-release.apk` | Android | Release build for distribution |
+                      | `aria-${{ needs.validate.outputs.version }}.ipa` | iOS | Release build for distribution |
+                  files: |
+                      artifacts/aria-${{ needs.validate.outputs.version }}-debug.apk
+                      artifacts/aria-${{ needs.validate.outputs.version }}-release.apk
+                      artifacts/aria-${{ needs.validate.outputs.version }}.ipa
+                  draft: false
+                  prerelease: ${{ contains(needs.validate.outputs.version, 'alpha') || contains(needs.validate.outputs.version, 'beta') }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
