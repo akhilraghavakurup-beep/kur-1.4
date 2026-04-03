@@ -14,7 +14,6 @@ import { useActiveDownloadsCount } from '@/src/application/state/download-store'
 import {
 	useHomeContentPreferences,
 	useResetHomeContentPreferences,
-	useSelectAllHomeContentPreferences,
 	useToggleHomeContentPreference,
 	useTabOrder,
 	useEnabledTabs,
@@ -126,7 +125,6 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 	const insets = useSafeAreaInsets();
 	const homeContentPreferences = useHomeContentPreferences();
 	const resetHomeContentPreferences = useResetHomeContentPreferences();
-	const selectAllHomeContentPreferences = useSelectAllHomeContentPreferences();
 	const toggleHomeContentPreference = useToggleHomeContentPreference();
 	const [preferencesSheetOpen, setPreferencesSheetOpen] = useState(false);
 	const title = TAB_CONFIG[currentTabId]?.title ?? '';
@@ -175,21 +173,6 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 				portalName={'home-preferences-sheet'}
 				title={'Home recommendations'}
 			>
-				<SettingsItem
-					icon={LanguagesIcon}
-					title={'Selected languages'}
-					subtitle={
-						homeContentPreferences.includes('All languages')
-							? 'All languages'
-						: homeContentPreferences.join(', ')
-					}
-				/>
-				<SettingsItem
-					icon={LanguagesIcon}
-					title={'Select all languages'}
-					subtitle={'Use the broadest possible recommendation mix'}
-					onPress={selectAllHomeContentPreferences}
-				/>
 				<SettingsItem
 					icon={RefreshCwIcon}
 					title={'Reset to defaults'}

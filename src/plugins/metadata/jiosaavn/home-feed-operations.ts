@@ -189,6 +189,16 @@ function mapPreferenceToApiLanguage(preference: HomeContentPreference): string |
 			return 'telugu';
 		case 'English':
 			return 'english';
+		case 'Kannada':
+			return 'kannada';
+		case 'Punjabi':
+			return 'punjabi';
+		case 'Marathi':
+			return 'marathi';
+		case 'Bengali':
+			return 'bengali';
+		case 'Gujarati':
+			return 'gujarati';
 		case 'All languages':
 		default:
 			return null;
@@ -205,7 +215,18 @@ function getPreferredSearchDefinitions(
 function getPreferredLanguages(): string[] {
 	const preferences = useSettingsStore.getState().homeContentPreferences;
 	if (preferences.includes('All languages')) {
-		return ['hindi', 'english', 'malayalam', 'tamil', 'telugu'];
+		return [
+			'hindi',
+			'english',
+			'malayalam',
+			'tamil',
+			'telugu',
+			'kannada',
+			'punjabi',
+			'marathi',
+			'bengali',
+			'gujarati',
+		];
 	}
 
 	const mapped = preferences

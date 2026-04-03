@@ -43,8 +43,13 @@ export const HOME_CONTENT_PREFERENCE_OPTIONS: {
 }[] = [
 	{ value: 'All languages', label: 'All languages', icon: NewspaperIcon },
 	{ value: 'Bollywood', label: 'Bollywood', icon: MusicIcon },
+	{ value: 'Bengali', label: 'Bengali', icon: MusicIcon },
 	{ value: 'English', label: 'English', icon: MusicIcon },
+	{ value: 'Gujarati', label: 'Gujarati', icon: MusicIcon },
+	{ value: 'Kannada', label: 'Kannada', icon: MusicIcon },
 	{ value: 'Malayalam', label: 'Malayalam', icon: MusicIcon },
+	{ value: 'Marathi', label: 'Marathi', icon: MusicIcon },
+	{ value: 'Punjabi', label: 'Punjabi', icon: MusicIcon },
 	{ value: 'Tamil', label: 'Tamil', icon: MusicIcon },
 	{ value: 'Telugu', label: 'Telugu', icon: MusicIcon },
 ];

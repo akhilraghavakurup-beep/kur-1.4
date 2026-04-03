@@ -21,7 +21,12 @@ export type HomeContentPreference =
 	| 'Malayalam'
 	| 'Tamil'
 	| 'Telugu'
-	| 'English';
+	| 'English'
+	| 'Kannada'
+	| 'Punjabi'
+	| 'Marathi'
+	| 'Bengali'
+	| 'Gujarati';
 
 export const DEFAULT_HOME_CONTENT_PREFERENCES: HomeContentPreference[] = [
 	'Bollywood',
