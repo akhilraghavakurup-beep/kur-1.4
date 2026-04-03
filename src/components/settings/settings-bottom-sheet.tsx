@@ -11,7 +11,7 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import BottomSheet, {
 	BottomSheetBackdrop,
-	BottomSheetView,
+	BottomSheetScrollView,
 	type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import type { BottomSheetMethods } from '@gorhom/bottom-sheet/lib/typescript/types';
@@ -93,7 +93,10 @@ export function SettingsBottomSheet({
 					{ backgroundColor: colors.outlineVariant },
 				]}
 			>
-				<BottomSheetView style={styles.content}>
+				<BottomSheetScrollView
+					contentContainerStyle={styles.content}
+					showsVerticalScrollIndicator={false}
+				>
 					<Text
 						variant={'titleMedium'}
 						style={[styles.title, { color: colors.onSurface }]}
@@ -123,7 +126,7 @@ export function SettingsBottomSheet({
 					)}
 
 					<View style={styles.bottomPadding} />
-				</BottomSheetView>
+				</BottomSheetScrollView>
 			</BottomSheet>
 		</Portal>
 	);
