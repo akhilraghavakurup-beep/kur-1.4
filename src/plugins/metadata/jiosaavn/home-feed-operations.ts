@@ -704,6 +704,36 @@ function dedupeSections(sections: FeedSection[]): FeedSection[] {
 	return deduped;
 }
 
+function prioritizeSections(sections: FeedSection[]): FeedSection[] {
+	const priorityTitles = [
+		'Trending Now',
+		'Top Charts',
+		'New Releases',
+		"What's Hot In Thiruvananthapuram",
+	];
+
+	const priorityMap = new Map(priorityTitles.map((title, index) => [title.toLowerCase(), index]));
+
+	return [...sections].sort((left, right) => {
+		const leftPriority = priorityMap.get(left.title.trim().toLowerCase());
+		const rightPriority = priorityMap.get(right.title.trim().toLowerCase());
+
+		if (leftPriority !== undefined && rightPriority !== undefined) {
+			return leftPriority - rightPriority;
+		}
+
+		if (leftPriority !== undefined) {
+			return -1;
+		}
+
+		if (rightPriority !== undefined) {
+			return 1;
+		}
+
+		return 0;
+	});
+}
+
 async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 	const launchData = await client.getLaunchData(getPreferredLanguageHeader());
 	const sections = await buildPreferredSections(client);
@@ -767,7 +797,7 @@ async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 	}
 
 	return {
-		sections: dedupeSections(sections),
+		sections: prioritizeSections(dedupeSections(sections)),
 		filterChips: [],
 		hasContinuation: false,
 	};
