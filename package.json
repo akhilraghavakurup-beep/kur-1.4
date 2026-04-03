@@ -1,7 +1,7 @@
 {
     "name":  "kurmusic",
     "main":  "lib/entry",
-    "version":  "1.4",
+    "version":  "1.4.1",
     "author":  {
                    "name":  "Kurup"
                },

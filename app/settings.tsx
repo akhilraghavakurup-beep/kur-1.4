@@ -331,7 +331,7 @@ export default function SettingsScreen() {
 					/>
 					<SettingsItem icon={InfoIcon} title={'Developed by'} subtitle={'Kurup'} />
 					<SettingsItem icon={InfoIcon} title={'Tested by'} subtitle={'Nemo'} />
-					<SettingsItem icon={InfoIcon} title={'Build'} subtitle={'Crawling pookie'} />
+					<SettingsItem icon={InfoIcon} title={'Build'} subtitle={'Pookie will bite sooner'} />
 				</SettingsSection>
 			</PlayerAwareScrollView>
 

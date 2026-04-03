@@ -38,8 +38,8 @@ export default function ArtistScreen() {
 	const error = useArtistError(id);
 
 	useEffect(() => {
-		artistService.getArtistDetail(id);
-	}, [id]);
+		artistService.getArtistDetail(id, name);
+	}, [id, name]);
 
 	const artistInfo = artistDetail.artist
 		? {

@@ -12,6 +12,7 @@ import { TrackId } from '@domain/value-objects/track-id';
 import type {
 	JioSaavnAlbum,
 	JioSaavnArtist,
+	JioSaavnArtistPageDetails,
 	JioSaavnArtistCollection,
 	JioSaavnArtistRef,
 	JioSaavnArtwork,
@@ -60,6 +61,28 @@ function parseNumber(value?: string | number | null): number | undefined {
 	}
 	const parsed = Number(value.replace(/,/g, '').trim());
 	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseArtistBio(value?: string | null): string | undefined {
+	const decoded = decode(value);
+	if (!decoded) {
+		return undefined;
+	}
+
+	if (!decoded.trim().startsWith('[')) {
+		return decoded;
+	}
+
+	try {
+		const parsed = JSON.parse(decoded) as Array<{ text?: string | null }>;
+		const text = parsed
+			.map((section) => decode(section?.text))
+			.filter(Boolean)
+			.join('\n\n');
+		return text || decoded;
+	} catch {
+		return decoded;
+	}
 }
 
 function nameOf(value: { name?: string | null; title?: string | null }): string {
@@ -275,8 +298,9 @@ export function mapAlbum(album: JioSaavnAlbum): Album | null {
 	};
 }
 
-export function mapArtist(artist: JioSaavnArtist): Artist | null {
-	if (!artist.id) {
+export function mapArtist(artist: JioSaavnArtist | JioSaavnArtistPageDetails): Artist | null {
+	const id = artist.id ?? artist.artistId;
+	if (!id) {
 		return null;
 	}
 
@@ -286,16 +310,19 @@ export function mapArtist(artist: JioSaavnArtist): Artist | null {
 	}
 
 	const artwork = mapImages(artist.image);
-	const bio = decode(artist.bio ?? artist.description);
+	const bio = parseArtistBio(artist.bio ?? artist.description);
+	const jiosaavnUrl =
+		artist.url ?? artist.perma_url ?? artist.urls?.overview ?? artist.urls?.songs ?? artist.urls?.albums;
 
 	return {
-		id: `jiosaavn-artist:${artist.id}`,
+		id: `jiosaavn-artist:${id}`,
 		name,
 		artwork: artwork.length > 0 ? artwork : undefined,
 		bio: bio || undefined,
-		monthlyListeners: parseNumber(artist.followerCount ?? artist.fanCount),
-		externalUrls:
-			artist.url ?? artist.perma_url ? { jiosaavn: artist.url ?? artist.perma_url! } : undefined,
+		monthlyListeners: parseNumber(
+			artist.followerCount ?? artist.fanCount ?? artist.follower_count ?? artist.fan_count
+		),
+		externalUrls: jiosaavnUrl ? { jiosaavn: jiosaavnUrl } : undefined,
 	};
 }
 

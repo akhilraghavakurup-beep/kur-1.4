@@ -4,6 +4,7 @@ import type {
 	JioSaavnAlbumSearchResponse,
 	JioSaavnApiResponse,
 	JioSaavnArtist,
+	JioSaavnArtistPageDetails,
 	JioSaavnArtistSearchResponse,
 	JioSaavnGlobalSearchResponse,
 	JioSaavnLaunchData,
@@ -78,6 +79,18 @@ export class JioSaavnClient {
 
 	getArtist(artistId: string, signal?: AbortSignal): Promise<JioSaavnArtist> {
 		return this._get<JioSaavnArtist>('/api/artists', { id: artistId }, signal);
+	}
+
+	getArtistPageDetails(
+		artistId: string,
+		language?: string,
+		signal?: AbortSignal
+	): Promise<JioSaavnArtistPageDetails> {
+		return this._webGet<JioSaavnArtistPageDetails>(
+			'artist.getArtistPageDetails',
+			{ artistId },
+			{ language, signal }
+		);
 	}
 
 	getArtistAlbums(

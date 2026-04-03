@@ -94,7 +94,9 @@ export interface JioSaavnAlbum {
 
 export interface JioSaavnArtist {
 	id: string;
+	artistId?: string | null;
 	name?: string | null;
+	subtitle?: string | null;
 	title?: string | null;
 	url?: string | null;
 	perma_url?: string | null;
@@ -103,6 +105,8 @@ export interface JioSaavnArtist {
 	image?: JioSaavnArtwork;
 	followerCount?: number | string | null;
 	fanCount?: number | string | null;
+	follower_count?: number | string | null;
+	fan_count?: number | string | null;
 	isVerified?: boolean;
 	dominantLanguage?: string | null;
 	dominantType?: string | null;
@@ -111,6 +115,16 @@ export interface JioSaavnArtist {
 	topAlbums?: JioSaavnAlbum[] | null;
 	singles?: JioSaavnAlbum[] | null;
 	similarArtists?: JioSaavnArtist[] | null;
+	urls?: {
+		overview?: string | null;
+		songs?: string | null;
+		albums?: string | null;
+		bio?: string | null;
+	} | null;
+}
+
+export interface JioSaavnArtistPageDetails extends JioSaavnArtist {
+	artistId: string;
 }
 
 export interface JioSaavnPlaylist {

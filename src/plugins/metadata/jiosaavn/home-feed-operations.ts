@@ -59,6 +59,41 @@ const matchesTitle =
 	(title: string) =>
 		patterns.some((pattern) => title.toLowerCase().includes(pattern));
 
+function normalizeLanguageTokens(value?: string | null): string[] {
+	if (!value) {
+		return [];
+	}
+
+	return value
+		.split(',')
+		.map((entry) => entry.trim().toLowerCase())
+		.filter(Boolean);
+}
+
+function itemMatchesLanguage(item: unknown, language: string): boolean {
+	if (!item || typeof item !== 'object') {
+		return false;
+	}
+
+	const candidate = item as {
+		language?: string | null;
+		dominantLanguage?: string | null;
+		more_info?: { language?: string | null } | null;
+	};
+
+	const languages = [
+		...normalizeLanguageTokens(candidate.language),
+		...normalizeLanguageTokens(candidate.dominantLanguage),
+		...normalizeLanguageTokens(candidate.more_info?.language),
+	];
+
+	if (languages.length === 0) {
+		return false;
+	}
+
+	return languages.includes(language);
+}
+
 function mapMixedFeedItems(items: unknown[]): FeedItem[] {
 	const mapped: FeedItem[] = [];
 
@@ -209,6 +244,7 @@ function getModuleOrder(modules?: Record<string, JioSaavnLaunchModule>): string[
 async function buildHomeFeed(client: JioSaavnClient, preset: BrowsePreset): Promise<HomeFeedData> {
 	const launchData = await client.getLaunchData(preset.language);
 	const sections: FeedSection[] = [];
+	const singleLanguage = preset.language.includes(',') ? null : preset.language;
 
 	for (const moduleKey of getModuleOrder(launchData.modules)) {
 		const module = launchData.modules?.[moduleKey];
@@ -228,7 +264,9 @@ async function buildHomeFeed(client: JioSaavnClient, preset: BrowsePreset): Prom
 			continue;
 		}
 
-		const mappedItems = definition.mapItems(items);
+		const scopedItems =
+			singleLanguage === null ? items : items.filter((item) => itemMatchesLanguage(item, singleLanguage));
+		const mappedItems = definition.mapItems(scopedItems);
 		const section = createSection(moduleKey, title, mappedItems, definition.subtitle ?? module.subtitle);
 		if (section) {
 			sections.push(section);

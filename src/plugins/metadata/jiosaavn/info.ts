@@ -67,7 +67,13 @@ export function createInfoOperations(client: JioSaavnClient): InfoOperations {
 		},
 		async getArtistInfo(artistId) {
 			try {
-				const artist = await client.getArtist(stripSourcePrefix(artistId));
+				const normalizedId = stripSourcePrefix(artistId);
+				let artist;
+				try {
+					artist = await client.getArtist(normalizedId);
+				} catch {
+					artist = await client.getArtistPageDetails(normalizedId, 'hindi,english');
+				}
 				const mapped = mapArtist(artist);
 				if (!mapped) {
 					return err(new Error(`Artist "${artistId}" could not be mapped`));
@@ -108,19 +114,33 @@ export function createInfoOperations(client: JioSaavnClient): InfoOperations {
 		},
 		async getArtistAlbums(artistId, options) {
 			try {
+				const normalizedId = stripSourcePrefix(artistId);
 				const offset = options?.offset ?? 0;
 				const limit = options?.limit ?? 20;
 				const page = Math.floor(offset / Math.max(limit, 1)) + 1;
-				const response = await client.getArtistAlbums(stripSourcePrefix(artistId), page);
-				const albums = response.results
-					.map(mapAlbum)
-					.filter((album): album is Album => !!album);
+				let albums: Album[] = [];
+				let total = 0;
+
+				try {
+					const response = await client.getArtistAlbums(normalizedId, page);
+					albums = response.results.map(mapAlbum).filter((album): album is Album => !!album);
+					total = response.total ?? albums.length;
+				} catch {
+					const artistPage = await client.getArtistPageDetails(normalizedId, 'hindi,english');
+					const fallbackAlbums = (artistPage.topAlbums ?? artistPage.singles ?? [])
+						.map(mapAlbum)
+						.filter((album): album is Album => !!album);
+					const sliced = sliceResults(fallbackAlbums, options);
+					albums = sliced.items;
+					total = fallbackAlbums.length;
+				}
+
 				return ok(
 					createSearchResults(albums, {
-						total: response.total ?? albums.length,
+						total,
 						offset,
 						limit,
-						hasMore: (response.total ?? albums.length) > offset + albums.length,
+						hasMore: total > offset + albums.length,
 					})
 				);
 			} catch (error) {

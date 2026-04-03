@@ -309,18 +309,12 @@ export class PlaybackService {
 		limit = 5
 	): Promise<Result<number, Error>> {
 		const provider = this._getRecommendationProvider(track);
-		if (!provider?.getRecommendations) {
-			return err(new Error('No recommendation provider available for this track'));
+		const recommendationsResult = await this._resolveRecommendations(track, provider, limit);
+		if (!recommendationsResult.success) {
+			return err(recommendationsResult.error);
 		}
 
-		const result = await provider.getRecommendations({ tracks: [track.id] }, undefined, limit);
-		if (!result.success) {
-			return err(result.error);
-		}
-
-		const recommendations = result.data.filter(
-			(item) => item.id.value !== track.id.value
-		);
+		const recommendations = recommendationsResult.data.filter((item) => item.id.value !== track.id.value);
 		if (recommendations.length === 0) {
 			return ok(0);
 		}
@@ -333,6 +327,39 @@ export class PlaybackService {
 			.forEach((item) => store.insertIntoQueue(item, insertIndex));
 
 		return ok(recommendations.length);
+	}
+
+	private async _resolveRecommendations(
+		track: Track,
+		provider: MetadataProvider | undefined,
+		limit: number
+	): Promise<Result<Track[], Error>> {
+		let recommendationError: Error | null = null;
+
+		if (provider?.getRecommendations) {
+			const result = await provider.getRecommendations({ tracks: [track.id] }, undefined, limit);
+			if (result.success && result.data.length > 0) {
+				return ok(result.data);
+			}
+			if (!result.success) {
+				recommendationError = result.error;
+			}
+		}
+
+		if (provider?.hasCapability('search-tracks')) {
+			const fallbackQuery = track.artists[0]?.name?.trim() || track.title;
+			const fallbackSearch = await provider.searchTracks(fallbackQuery, { limit: limit + 5 });
+			if (fallbackSearch.success) {
+				const items = fallbackSearch.data.items.filter(
+					(item) => item.id.value !== track.id.value
+				);
+				if (items.length > 0) {
+					return ok(items.slice(0, limit));
+				}
+			}
+		}
+
+		return err(recommendationError ?? new Error('No recommendation provider available for this track'));
 	}
 
 	private _getCachedStream(trackId: string): AudioStream | null {
@@ -441,11 +468,7 @@ export class PlaybackService {
 	private _getRecommendationProvider(track: Track): MetadataProvider | undefined {
 		return getPluginRegistry()
 			.getActiveMetadataProviders()
-			.find(
-				(provider) =>
-					provider.manifest.id === track.id.sourceType &&
-					typeof provider.getRecommendations === 'function'
-			);
+			.find((provider) => provider.manifest.id === track.id.sourceType);
 	}
 
 	private async _tryProvider(

@@ -55,12 +55,16 @@ export class ArtistService {
 		this._cachedService.clearCache();
 	}
 
-	async getArtistDetail(artistId: string): Promise<Result<ArtistDetailResult, Error>> {
+	async getArtistDetail(
+		artistId: string,
+		fallbackName?: string
+	): Promise<Result<ArtistDetailResult, Error>> {
 		const store = useArtistStore.getState();
+		const cacheKey = fallbackName ? `${artistId}::${fallbackName}` : artistId;
 
 		return this._cachedService.getOrFetch(
-			artistId,
-			() => this._fetchArtistDetail(artistId),
+			cacheKey,
+			() => this._fetchArtistDetail(artistId, fallbackName),
 			(result) =>
 				store.setArtistDetail(
 					artistId,
@@ -72,7 +76,10 @@ export class ArtistService {
 		);
 	}
 
-	private async _fetchArtistDetail(artistId: string): Promise<Result<ArtistDetailResult, Error>> {
+	private async _fetchArtistDetail(
+		artistId: string,
+		fallbackName?: string
+	): Promise<Result<ArtistDetailResult, Error>> {
 		const store = useArtistStore.getState();
 		store.setLoading(artistId, true);
 
@@ -95,12 +102,34 @@ export class ArtistService {
 
 		for (const provider of targetProviders) {
 			try {
-				const idToUse = rawId || artistId;
+				let idToUse = rawId || artistId;
 				logger.debug(`Fetching artist ${idToUse} from ${provider.manifest.id}`);
 
-				const artistInfoResult = provider.hasCapability('get-artist-info')
+				let artistInfoResult = provider.hasCapability('get-artist-info')
 					? await provider.getArtistInfo(idToUse)
 					: { success: false as const, error: new Error('Not supported') };
+				let artistFromSearch: Artist | null = null;
+
+				if (
+					!artistInfoResult.success &&
+					fallbackName &&
+					provider.hasCapability('search-artists')
+				) {
+					const searchResult = await provider.searchArtists(fallbackName, { limit: 5 });
+					if (searchResult.success && searchResult.data.items.length > 0) {
+						const matchedArtist = this._pickBestArtistMatch(
+							searchResult.data.items,
+							fallbackName
+						);
+						if (matchedArtist) {
+							artistFromSearch = matchedArtist;
+							idToUse = this._extractProviderArtistId(matchedArtist.id) ?? idToUse;
+							if (provider.hasCapability('get-artist-info')) {
+								artistInfoResult = await provider.getArtistInfo(idToUse);
+							}
+						}
+					}
+				}
 
 				const albumsResult = provider.hasCapability('get-artist-albums')
 					? await provider.getArtistAlbums(idToUse, { limit: 20 })
@@ -114,7 +143,7 @@ export class ArtistService {
 					continue;
 				}
 
-				const artist = artistInfoResult.success ? artistInfoResult.data : null;
+				const artist = artistInfoResult.success ? artistInfoResult.data : artistFromSearch;
 				const albums = albumsResult.success ? albumsResult.data.items : [];
 				const topTracks =
 					artist && provider.hasCapability('search-tracks')
@@ -176,6 +205,30 @@ export class ArtistService {
 		provider: MetadataProvider
 	): provider is ArtistStationCapableProvider {
 		return typeof (provider as ArtistStationCapableProvider).getArtistStationTracks === 'function';
+	}
+
+	private _extractProviderArtistId(artistId: string): string | null {
+		const [, rawId] = this._parseArtistId(artistId);
+		return rawId ?? artistId;
+	}
+
+	private _pickBestArtistMatch(artists: Artist[], targetName: string): Artist | null {
+		if (artists.length === 0) {
+			return null;
+		}
+
+		const normalizedTarget = this._normalizeArtistName(targetName);
+		return (
+			artists.find((artist) => this._normalizeArtistName(artist.name) === normalizedTarget) ??
+			artists.find((artist) =>
+				this._normalizeArtistName(artist.name).includes(normalizedTarget)
+			) ??
+			artists[0]
+		);
+	}
+
+	private _normalizeArtistName(value: string): string {
+		return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 	}
 }
 
