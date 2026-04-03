@@ -198,8 +198,8 @@ export default function SettingsScreen() {
 						title={'Home recommendations'}
 						subtitle={
 							homeContentPreferences.includes('All languages')
-								? 'All languages'
-								: homeContentPreferences.join(', ')
+								? 'Selected: All languages'
+								: `Selected: ${homeContentPreferences.join(', ')}`
 						}
 					/>
 					{HOME_CONTENT_PREFERENCE_OPTIONS.map((option) => (

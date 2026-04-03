@@ -38,7 +38,53 @@ interface SectionDefinition {
 	subtitle?: string;
 }
 
+interface PreferredSectionDefinition {
+	preference: Exclude<HomeContentPreference, 'All languages'>;
+	query: string;
+	title: string;
+	subtitle: string;
+}
+
+interface CachedHomeFeedEntry {
+	data: HomeFeedData;
+	cachedAt: number;
+}
+
 const PLAYLIST_FETCH_LIMIT = 200;
+const HOME_FEED_CACHE_TTL_MS = 10 * 60 * 1000;
+
+const PREFERRED_SECTIONS: PreferredSectionDefinition[] = [
+	{
+		preference: 'Bollywood',
+		query: 'Bollywood Hits',
+		title: 'Bollywood Picks',
+		subtitle: 'Popular Hindi and Bollywood playlists picked for your home feed',
+	},
+	{
+		preference: 'Malayalam',
+		query: 'Malayalam Hits',
+		title: 'Malayalam Picks',
+		subtitle: 'Fresh Malayalam playlists and staples to start from',
+	},
+	{
+		preference: 'Tamil',
+		query: 'Tamil Hits',
+		title: 'Tamil Picks',
+		subtitle: 'Tamil favorites and trending playlist shortcuts',
+	},
+	{
+		preference: 'Telugu',
+		query: 'Telugu Hits',
+		title: 'Telugu Picks',
+		subtitle: 'Telugu playlists shaped by your listening preference',
+	},
+	{
+		preference: 'English',
+		query: 'English Hits',
+		title: 'English Picks',
+		subtitle: 'English playlists to balance your home feed',
+	},
+];
 
 const matchesTitle =
 	(...patterns: string[]) =>
@@ -87,8 +133,24 @@ function getPreferredLanguages(): string[] {
 	return mapped.length > 0 ? mapped : ['hindi', 'malayalam', 'tamil'];
 }
 
+function getSelectedPreferences(): Exclude<HomeContentPreference, 'All languages'>[] {
+	const preferences = useSettingsStore
+		.getState()
+		.homeContentPreferences.filter(
+			(preference): preference is Exclude<HomeContentPreference, 'All languages'> =>
+				preference !== 'All languages'
+		);
+
+	return preferences.length > 0 ? preferences : ['Bollywood', 'Malayalam', 'Tamil'];
+}
+
 function getPreferredLanguageHeader(): string {
 	return getPreferredLanguages().join(',');
+}
+
+function getPreferenceSignature(): string {
+	const preferences = useSettingsStore.getState().homeContentPreferences;
+	return preferences.join('|');
 }
 
 function getItemLanguageSet(item: unknown): Set<string> {
@@ -194,6 +256,43 @@ function mapMixedFeedItems(items: unknown[]): FeedItem[] {
 	return mapped;
 }
 
+function mapAnyFeedItems(items: unknown[]): FeedItem[] {
+	const mapped: FeedItem[] = [];
+
+	for (const item of items) {
+		if (!item || typeof item !== 'object') {
+			continue;
+		}
+
+		const candidate = item as
+			| JioSaavnSong
+			| JioSaavnAlbum
+			| JioSaavnPlaylist
+			| JioSaavnRadioStation;
+
+		if (candidate.type === 'radio_station') {
+			const artist = mapArtistStation(candidate as JioSaavnRadioStation);
+			if (artist) {
+				mapped.push({ type: 'artist', data: artist });
+			}
+			continue;
+		}
+
+		const mixed = mapMixedFeedItems([candidate]);
+		if (mixed.length > 0) {
+			mapped.push(...mixed);
+			continue;
+		}
+
+		const playlist = mapPlaylistFeed(candidate as JioSaavnPlaylist);
+		if (playlist) {
+			mapped.push({ type: 'playlist', data: playlist });
+		}
+	}
+
+	return mapped;
+}
+
 function mapPlaylistItems(items: unknown[]): FeedItem[] {
 	return items
 		.map((item) => mapPlaylistFeed(item as JioSaavnPlaylist))
@@ -251,6 +350,36 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
 		mapItems: mapPlaylistItems,
 		subtitle: 'Jump into genres, moods, and starter collections',
 	},
+	{
+		key: 'radio',
+		titleMatcher: matchesTitle('radio stations', 'radio'),
+		mapItems: mapArtistStationItems,
+		subtitle: 'Lean back with artist and station-based recommendations',
+	},
+	{
+		key: 'promo:podcasts',
+		titleMatcher: matchesTitle('trending podcasts', 'podcasts'),
+		mapItems: mapAnyFeedItems,
+		subtitle: 'Popular spoken-audio recommendations from JioSaavn',
+	},
+	{
+		key: 'city_mod',
+		titleMatcher: matchesTitle(`what's hot`, 'trending this week', 'hot in'),
+		mapItems: mapAnyFeedItems,
+		subtitle: 'Regional momentum and what is trending around you',
+	},
+	{
+		key: 'promo:classics',
+		titleMatcher: matchesTitle('best of 90s', '90s', 'retro'),
+		mapItems: mapAnyFeedItems,
+		subtitle: 'Throwback recommendations and catalog favorites',
+	},
+	{
+		key: 'promo:new-release-focus',
+		titleMatcher: matchesTitle('new releases pop', 'new releases', 'pop -'),
+		mapItems: mapAnyFeedItems,
+		subtitle: 'More focused release shelves directly from JioSaavn promos',
+	},
 ];
 
 function createSection(
@@ -282,9 +411,88 @@ function getModuleOrder(modules?: Record<string, JioSaavnLaunchModule>): string[
 		.map(([key]) => key);
 }
 
+async function buildPreferredSections(client: JioSaavnClient): Promise<FeedSection[]> {
+	const preferences = getSelectedPreferences();
+	const sections = await Promise.all(
+		PREFERRED_SECTIONS.filter((section) => preferences.includes(section.preference)).map(
+			async (section) => {
+				try {
+					const response = await client.searchPlaylists(section.query, 0, 8);
+					const items = response.results
+						.map(mapPlaylistFeed)
+						.filter((playlist): playlist is NonNullable<ReturnType<typeof mapPlaylistFeed>> => !!playlist)
+						.map((playlist) => ({ type: 'playlist' as const, data: playlist }));
+
+					if (items.length === 0) {
+						return null;
+					}
+
+					return createSection(
+						`preferred-${section.preference.toLowerCase()}`,
+						section.title,
+						items,
+						section.subtitle
+					);
+				} catch {
+					return null;
+				}
+			}
+		)
+	);
+
+	return sections.filter((section): section is FeedSection => !!section);
+}
+
+function itemDedupKey(item: FeedItem): string {
+	switch (item.type) {
+		case 'track':
+			return `track:${item.data.id.value}`;
+		case 'album':
+			return `album:${item.data.id.value}`;
+		case 'artist':
+			return `artist:${item.data.id}`;
+		case 'playlist':
+			return `playlist:${item.data.id}`;
+	}
+}
+
+function dedupeSections(sections: FeedSection[]): FeedSection[] {
+	const seenItems = new Set<string>();
+	const seenSectionTitles = new Set<string>();
+	const deduped: FeedSection[] = [];
+
+	for (const section of sections) {
+		const titleKey = section.title.trim().toLowerCase();
+		if (seenSectionTitles.has(titleKey)) {
+			continue;
+		}
+
+		const items = section.items.filter((item) => {
+			const key = itemDedupKey(item);
+			if (seenItems.has(key)) {
+				return false;
+			}
+			seenItems.add(key);
+			return true;
+		});
+
+		if (items.length === 0) {
+			continue;
+		}
+
+		seenSectionTitles.add(titleKey);
+		deduped.push({
+			...section,
+			items,
+		});
+	}
+
+	return deduped;
+}
+
 async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 	const launchData = await client.getLaunchData(getPreferredLanguageHeader());
-	const sections: FeedSection[] = [];
+	const sections = await buildPreferredSections(client);
 
 	for (const moduleKey of getModuleOrder(launchData.modules)) {
 		const module = launchData.modules?.[moduleKey];
@@ -300,30 +508,42 @@ async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 				(candidate.key === moduleKey || candidate.key.startsWith('promo:')) &&
 				candidate.titleMatcher(title)
 		);
-		if (!definition) {
-			continue;
-		}
 
 		const scopedItems = sortItemsForPreferences(items);
-		const mappedItems = definition.mapItems(scopedItems);
-		const section = createSection(moduleKey, title, mappedItems, definition.subtitle ?? module.subtitle);
+		const mappedItems = definition ? definition.mapItems(scopedItems) : mapAnyFeedItems(scopedItems);
+		const section = createSection(
+			moduleKey,
+			title,
+			mappedItems,
+			definition?.subtitle ?? module.subtitle
+		);
 		if (section) {
 			sections.push(section);
 		}
 	}
 
 	return {
-		sections,
+		sections: dedupeSections(sections),
 		filterChips: [],
 		hasContinuation: false,
 	};
 }
 
 export function createHomeFeedOperations(client: JioSaavnClient): HomeFeedOperations {
+	const cache = new Map<string, CachedHomeFeedEntry>();
+
 	return {
 		async getHomeFeed(): Promise<Result<HomeFeedData, Error>> {
 			try {
-				return ok(await buildHomeFeed(client));
+				const signature = getPreferenceSignature();
+				const cached = cache.get(signature);
+				if (cached && Date.now() - cached.cachedAt < HOME_FEED_CACHE_TTL_MS) {
+					return ok(cached.data);
+				}
+
+				const data = await buildHomeFeed(client);
+				cache.set(signature, { data, cachedAt: Date.now() });
+				return ok(data);
 			} catch (error) {
 				return err(error instanceof Error ? error : new Error(String(error)));
 			}
@@ -331,7 +551,9 @@ export function createHomeFeedOperations(client: JioSaavnClient): HomeFeedOperat
 
 		async applyFilter(_chipText: string): Promise<Result<HomeFeedData, Error>> {
 			try {
-				return ok(await buildHomeFeed(client));
+				const data = await buildHomeFeed(client);
+				cache.set(getPreferenceSignature(), { data, cachedAt: Date.now() });
+				return ok(data);
 			} catch (error) {
 				return err(error instanceof Error ? error : new Error(String(error)));
 			}

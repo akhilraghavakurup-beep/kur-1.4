@@ -4,14 +4,17 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text, IconButton } from 'react-native-paper';
-import { LanguagesIcon, SettingsIcon } from 'lucide-react-native';
+import { CheckIcon, CircleIcon, LanguagesIcon, RefreshCwIcon, SettingsIcon } from 'lucide-react-native';
 import { ProfileAvatarButton } from '@/src/components/ui/profile-avatar-button';
 import { SettingsBottomSheet } from '@/src/components/settings/settings-bottom-sheet';
 import { SettingsItem } from '@/src/components/settings/settings-item';
 import { useAppTheme, resolveDisplayFont } from '@/lib/theme';
+import { homeFeedService } from '@/src/application/services/home-feed-service';
 import { useActiveDownloadsCount } from '@/src/application/state/download-store';
 import {
 	useHomeContentPreferences,
+	useResetHomeContentPreferences,
+	useSelectAllHomeContentPreferences,
 	useToggleHomeContentPreference,
 	useTabOrder,
 	useEnabledTabs,
@@ -122,6 +125,8 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 	const { colors } = useAppTheme();
 	const insets = useSafeAreaInsets();
 	const homeContentPreferences = useHomeContentPreferences();
+	const resetHomeContentPreferences = useResetHomeContentPreferences();
+	const selectAllHomeContentPreferences = useSelectAllHomeContentPreferences();
 	const toggleHomeContentPreference = useToggleHomeContentPreference();
 	const [preferencesSheetOpen, setPreferencesSheetOpen] = useState(false);
 	const title = TAB_CONFIG[currentTabId]?.title ?? '';
@@ -141,6 +146,13 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 						)}
 						onPress={() => setPreferencesSheetOpen(true)}
 						accessibilityLabel={'Home recommendation preferences'}
+					/>
+					<IconButton
+						icon={() => (
+							<Icon as={RefreshCwIcon} size={20} color={colors.onSurfaceVariant} />
+						)}
+						onPress={() => homeFeedService.fetchHomeFeed({ force: true })}
+						accessibilityLabel={'Refresh recommendations'}
 					/>
 					<IconButton
 						icon={() => <Icon as={SettingsIcon} size={22} color={colors.onSurfaceVariant} />}
@@ -163,6 +175,27 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 				portalName={'home-preferences-sheet'}
 				title={'Home recommendations'}
 			>
+				<SettingsItem
+					icon={LanguagesIcon}
+					title={'Selected languages'}
+					subtitle={
+						homeContentPreferences.includes('All languages')
+							? 'All languages'
+						: homeContentPreferences.join(', ')
+					}
+				/>
+				<SettingsItem
+					icon={LanguagesIcon}
+					title={'Select all languages'}
+					subtitle={'Use the broadest possible recommendation mix'}
+					onPress={selectAllHomeContentPreferences}
+				/>
+				<SettingsItem
+					icon={RefreshCwIcon}
+					title={'Reset to defaults'}
+					subtitle={'Return to Bollywood, Malayalam, and Tamil focus'}
+					onPress={resetHomeContentPreferences}
+				/>
 				{HOME_CONTENT_PREFERENCE_OPTIONS.map((option) => (
 					<SettingsItem
 						key={option.value}
@@ -177,7 +210,11 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 							<IconButton
 								icon={() => (
 									<Icon
-										as={option.value === 'All languages' ? LanguagesIcon : option.icon}
+										as={
+											homeContentPreferences.includes(option.value)
+												? CheckIcon
+												: CircleIcon
+										}
 										size={18}
 										color={
 											homeContentPreferences.includes(option.value)

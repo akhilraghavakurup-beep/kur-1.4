@@ -51,6 +51,8 @@ interface SettingsState {
 	setDefaultTab: (tab: DefaultTab) => void;
 	setHomeContentPreferences: (preferences: HomeContentPreference[]) => void;
 	toggleHomeContentPreference: (preference: HomeContentPreference) => void;
+	selectAllHomeContentPreferences: () => void;
+	resetHomeContentPreferences: () => void;
 	setDefaultLibraryTab: (tab: LibraryTabId) => void;
 	setAccentColor: (color: string | null) => void;
 	setTabOrder: (order: TabId[]) => void;
@@ -129,6 +131,12 @@ export const useSettingsStore = create<SettingsState>()(
 					homeContentPreferences:
 						nextPreferences.length > 0 ? nextPreferences : DEFAULT_HOME_CONTENT_PREFERENCES,
 				});
+			},
+			selectAllHomeContentPreferences: () => {
+				set({ homeContentPreferences: ['All languages'] });
+			},
+			resetHomeContentPreferences: () => {
+				set({ homeContentPreferences: DEFAULT_HOME_CONTENT_PREFERENCES });
 			},
 			setDefaultLibraryTab: (tab: LibraryTabId) => {
 				set({ defaultLibraryTab: tab });
@@ -219,6 +227,12 @@ export const useSetHomeContentPreferences = () =>
 
 export const useToggleHomeContentPreference = () =>
 	useSettingsStore((state) => state.toggleHomeContentPreference);
+
+export const useSelectAllHomeContentPreferences = () =>
+	useSettingsStore((state) => state.selectAllHomeContentPreferences);
+
+export const useResetHomeContentPreferences = () =>
+	useSettingsStore((state) => state.resetHomeContentPreferences);
 
 export const useAccentColor = () => useSettingsStore((state) => state.accentColor);
 
