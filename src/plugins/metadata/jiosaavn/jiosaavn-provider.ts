@@ -67,7 +67,7 @@ export class JioSaavnProvider implements MetadataProvider, AudioSourceProvider {
 			this.status = 'initializing';
 			const config: JioSaavnConfig = { ...this.config, ...context.config };
 			this.client = createJioSaavnClient({
-				baseUrl: config.baseUrl ?? DEFAULT_CONFIG.baseUrl ?? 'https://saavn.sumit.co',
+				baseUrl: config.baseUrl ?? DEFAULT_CONFIG.baseUrl ?? 'https://www.jiosaavn.com',
 			});
 			this.searchOps = createSearchOperations(this.client);
 			this.infoOps = createInfoOperations(this.client);

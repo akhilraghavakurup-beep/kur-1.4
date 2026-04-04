@@ -27,6 +27,7 @@ import {
 	usePluginById,
 	DEFAULT_PLUGIN_ICON,
 } from '@/src/hooks/use-plugin-display';
+import { DIRECT_JIOSAAVN_WEB_API_URL } from '@/src/plugins/metadata/jiosaavn/config';
 
 export default function PluginDetailScreen() {
 	const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,9 +43,7 @@ export default function PluginDetailScreen() {
 
 	useEffect(() => {
 		if (plugin?.id === 'jiosaavn') {
-			setApiUrlDraft(
-				String(pluginConfig.baseUrl ?? 'https://saavn.sumit.co')
-			);
+			setApiUrlDraft(String(pluginConfig.baseUrl ?? DIRECT_JIOSAAVN_WEB_API_URL));
 		}
 	}, [plugin?.id, pluginConfig.baseUrl]);
 
@@ -76,7 +75,7 @@ export default function PluginDetailScreen() {
 	}, [plugin, toastSuccess]);
 
 	const normalizedApiUrl = useMemo(() => apiUrlDraft.trim(), [apiUrlDraft]);
-	const savedApiUrl = String(pluginConfig.baseUrl ?? 'https://saavn.sumit.co');
+	const savedApiUrl = String(pluginConfig.baseUrl ?? DIRECT_JIOSAAVN_WEB_API_URL);
 	const canSaveApiUrl =
 		plugin?.id === 'jiosaavn' &&
 		normalizedApiUrl.length > 0 &&
@@ -227,14 +226,14 @@ export default function PluginDetailScreen() {
 								autoCorrect={false}
 								autoComplete={'off'}
 								keyboardType={'url'}
-								placeholder={'https://saavn.sumit.co'}
+								placeholder={DIRECT_JIOSAAVN_WEB_API_URL}
 							/>
 							<Text
 								variant={'bodySmall'}
 								style={[styles.apiHelp, { color: colors.onSurfaceVariant }]}
 							>
-								Use any saavn.dev-compatible API URL. It saves on device, so you can
-								switch endpoints without recompiling.
+								Use the direct JioSaavn web API URL or a compatible proxy. It saves on
+								device, so you can switch endpoints without recompiling.
 							</Text>
 							<Button
 								mode={'contained'}

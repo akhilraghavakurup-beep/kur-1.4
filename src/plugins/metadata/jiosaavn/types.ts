@@ -85,6 +85,8 @@ export interface JioSaavnAlbum {
 	artists?: JioSaavnArtistCollection | null;
 	songs?: JioSaavnSong[] | null;
 	subtitle?: string | null;
+	list_count?: number | string | null;
+	list?: JioSaavnSong[] | null;
 	more_info?: {
 		release_date?: string | null;
 		song_count?: string | number | null;
@@ -145,6 +147,8 @@ export interface JioSaavnPlaylist {
 	artists?: JioSaavnArtistRef[] | null;
 	subtitle?: string | null;
 	count?: number | string | null;
+	list_count?: number | string | null;
+	list?: JioSaavnSong[] | null;
 	more_info?: {
 		listid?: string | null;
 		listname?: string | null;
@@ -164,6 +168,10 @@ export interface JioSaavnSongSearchResponse {
 	total?: number;
 	start?: number;
 	results: JioSaavnSong[];
+}
+
+export interface JioSaavnSongDetailsResponse {
+	songs?: JioSaavnSong[] | null;
 }
 
 export interface JioSaavnAlbumSearchResponse {
