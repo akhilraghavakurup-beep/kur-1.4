@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native';
 import { SettingsBottomSheet } from '@/src/components/settings/settings-bottom-sheet';
 import { SettingsItem } from '@/src/components/settings/settings-item';
+import { HomeLanguagePriorityPicker } from '@/src/components/settings/home-language-priority-picker';
 import { useAppTheme, resolveDisplayFont } from '@/lib/theme';
 import { homeFeedService } from '@/src/application/services/home-feed-service';
 import { useActiveDownloadsCount } from '@/src/application/state/download-store';
@@ -26,6 +27,7 @@ import {
 	useMoveHomeFeedPriorityUp,
 	useResetHomeContentPreferences,
 	useResetHomeFeedPriority,
+	useSetHomeContentPreferences,
 	useToggleHomeContentPreference,
 	useTabOrder,
 	useEnabledTabs,
@@ -151,6 +153,7 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 	const moveHomeFeedPriorityDown = useMoveHomeFeedPriorityDown();
 	const resetHomeContentPreferences = useResetHomeContentPreferences();
 	const resetHomeFeedPriority = useResetHomeFeedPriority();
+	const setHomeContentPreferences = useSetHomeContentPreferences();
 	const toggleHomeContentPreference = useToggleHomeContentPreference();
 	const [preferencesSheetOpen, setPreferencesSheetOpen] = useState(false);
 	const title = TAB_CONFIG[currentTabId]?.title ?? '';
@@ -203,6 +206,10 @@ function TabHeader({ initialTabId }: { readonly initialTabId: TabId }) {
 				portalName={'home-preferences-sheet'}
 				title={'Home recommendations'}
 			>
+				<HomeLanguagePriorityPicker
+					preferences={homeContentPreferences}
+					onReorder={setHomeContentPreferences}
+				/>
 				<SettingsItem
 					icon={RefreshCwIcon}
 					title={'Reset to defaults'}
