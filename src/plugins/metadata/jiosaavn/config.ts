@@ -7,8 +7,11 @@ export interface JioSaavnConfig {
 	preferredQuality?: string;
 }
 
+export const DIRECT_JIOSAAVN_WEB_API_URL =
+	'https://www.jiosaavn.com/api.php?_format=json&_marker=0&api_version=4&ctx=web6dot0';
+
 export const DEFAULT_CONFIG: JioSaavnConfig = {
-	baseUrl: process.env.EXPO_PUBLIC_JIOSAAVN_API_BASE_URL ?? 'https://saavn.sumit.co',
+	baseUrl: process.env.EXPO_PUBLIC_JIOSAAVN_API_BASE_URL ?? DIRECT_JIOSAAVN_WEB_API_URL,
 	preferredQuality: '320kbps',
 };
 
@@ -16,11 +19,11 @@ export const PLUGIN_MANIFEST: PluginManifest = {
 	id: 'jiosaavn',
 	name: 'JioSaavn',
 	shortName: 'JS',
-	description: 'Browse, search, and stream music from JioSaavn via the saavn.dev-compatible API',
+	description: 'Browse, search, and stream music from JioSaavn using the direct web API or a compatible proxy',
 	version: '1.0.0',
 	author: 'Aria',
 	category: 'metadata-provider',
-	homepage: 'https://saavn.dev',
+	homepage: 'https://www.jiosaavn.com',
 	iconUrl:
 		'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/JioSaavn_logo.svg/512px-JioSaavn_logo.svg.png',
 	capabilities: [
@@ -49,7 +52,7 @@ export const CONFIG_SCHEMA: PluginConfigSchema[] = [
 		key: 'baseUrl',
 		type: 'string',
 		label: 'API Base URL',
-		description: 'Base URL for the JioSaavn-compatible API',
+		description: 'Direct JioSaavn web API URL or a compatible proxy base URL',
 		defaultValue: DEFAULT_CONFIG.baseUrl,
 	},
 	{

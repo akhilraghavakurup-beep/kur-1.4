@@ -106,7 +106,11 @@ export class HomeFeedService {
 		);
 
 		for (const settled of results) {
-			if (settled.status !== 'fulfilled') continue;
+			if (settled.status !== 'fulfilled') {
+				logger.error('Failed to fetch home feed from provider', settled.reason);
+				continue;
+			}
+
 			const { id, result } = settled.value;
 			const state = this._providers.get(id);
 			if (!state) continue;
@@ -215,6 +219,18 @@ export class HomeFeedService {
 				hasAnySuccess = true;
 			} else {
 				logger.error(`Failed to fetch home feed from ${id}`, result.error);
+				state.sections = [];
+				state.filterChips = [];
+				state.hasContinuation = false;
+			}
+		}
+
+		for (const [id, state] of this._providers.entries()) {
+			const didSettle = results.some(
+				(settled) => settled.status === 'fulfilled' && settled.value.id === id
+			);
+
+			if (!didSettle) {
 				state.sections = [];
 				state.filterChips = [];
 				state.hasContinuation = false;

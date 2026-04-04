@@ -54,14 +54,7 @@ interface SearchSectionQueryDefinition {
 	queries: string[];
 }
 
-interface CachedHomeFeedEntry {
-	data: HomeFeedData;
-	cachedAt: number;
-}
-
 const PLAYLIST_FETCH_LIMIT = 200;
-const HOME_FEED_CACHE_TTL_MS = 10 * 60 * 1000;
-const HOME_FEED_CACHE_VERSION = 'v2';
 
 const PREFERRED_SECTIONS: PreferredSectionDefinition[] = [
 	{
@@ -253,11 +246,6 @@ function getSelectedPreferences(): Exclude<HomeContentPreference, 'All languages
 
 function getPreferredLanguageHeader(): string {
 	return getPreferredLanguages().join(',');
-}
-
-function getPreferenceSignature(): string {
-	const preferences = useSettingsStore.getState().homeContentPreferences;
-	return `${HOME_FEED_CACHE_VERSION}:${preferences.join('|')}`;
 }
 
 function getItemLanguageSet(item: unknown): Set<string> {
@@ -826,19 +814,10 @@ async function buildHomeFeed(client: JioSaavnClient): Promise<HomeFeedData> {
 }
 
 export function createHomeFeedOperations(client: JioSaavnClient): HomeFeedOperations {
-	const cache = new Map<string, CachedHomeFeedEntry>();
-
 	return {
 		async getHomeFeed(): Promise<Result<HomeFeedData, Error>> {
 			try {
-				const signature = getPreferenceSignature();
-				const cached = cache.get(signature);
-				if (cached && Date.now() - cached.cachedAt < HOME_FEED_CACHE_TTL_MS) {
-					return ok(cached.data);
-				}
-
 				const data = await buildHomeFeed(client);
-				cache.set(signature, { data, cachedAt: Date.now() });
 				return ok(data);
 			} catch (error) {
 				return err(error instanceof Error ? error : new Error(String(error)));
@@ -848,7 +827,6 @@ export function createHomeFeedOperations(client: JioSaavnClient): HomeFeedOperat
 		async applyFilter(_chipText: string): Promise<Result<HomeFeedData, Error>> {
 			try {
 				const data = await buildHomeFeed(client);
-				cache.set(getPreferenceSignature(), { data, cachedAt: Date.now() });
 				return ok(data);
 			} catch (error) {
 				return err(error instanceof Error ? error : new Error(String(error)));
